@@ -47,30 +47,27 @@ def render_dashboard():
             </div>
         ''', unsafe_allow_html=True)
     with col4:
-        st.markdown(f'''
-            <div class="kpi-card">
-                <div class="kpi-icon">📈</div>
-                <div class="kpi-value">₹{stats["revenue_today"]:,.2f}</div>
-                <div class="kpi-label">Revenue Today</div>
-            </div>
-        ''', unsafe_allow_html=True)
+        st.metric(label="Revenue Today", value=f"₹{stats['revenue_today']:,.2f}", 
+                  delta=f"₹{stats['revenue_today'] - stats['revenue_yesterday']:,.2f} from yesterday",
+                  delta_color="normal")
+        st.markdown('</div>', unsafe_allow_html=True)
     
     st.markdown("<br>", unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     
     with c1:
-        st.markdown('### 📉 Stock Movement Trend')
-        trend_df = db.get_movement_trend()
+        st.markdown('### 📈 Daily Revenue Trend')
+        trend_df = db.get_sales_trend()
         if not trend_df.empty:
-            fig = px.area(trend_df, x='date', y=['stock_in', 'stock_out'], 
-                          color_discrete_sequence=['#34d399', '#ef4444'],
-                          template="plotly_dark",
-                          labels={'value': 'Quantity', 'variable': 'Movement Type'})
+            fig = px.bar(trend_df, x='date', y='revenue', 
+                         color_discrete_sequence=['#6366f1'],
+                         template="plotly_dark",
+                         labels={'revenue': 'Revenue (₹)', 'date': 'Date'})
             fig.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
                               margin=dict(l=0, r=0, t=30, b=0))
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("No stock movement data available.")
+            st.info("No sales data available.")
 
     with c2:
         st.markdown('### 🍩 Category Value Distribution')
@@ -144,12 +141,8 @@ def render_products():
                 categories = db.fetch_df("SELECT id, name FROM categories")
                 cat_opts = dict(zip(categories['name'], categories['id'])) if not categories.empty else {}
                 
-                suppliers = db.fetch_df("SELECT id, name FROM suppliers")
-                sup_opts = dict(zip(suppliers['name'], suppliers['id'])) if not suppliers.empty else {}
-                
                 c3, c4 = st.columns(2)
                 cat_name = c3.selectbox("Category", options=list(cat_opts.keys()))
-                sup_name = c4.selectbox("Supplier", options=list(sup_opts.keys()))
                 
                 c5, c6, c7 = st.columns(3)
                 cost = c5.number_input("Cost Price (₹)", min_value=0.0, step=0.01)
@@ -163,8 +156,8 @@ def render_products():
                         try:
                             db.execute_query("""
                                 INSERT INTO products (name, sku, category_id, supplier_id, cost_price, selling_price, quantity)
-                                VALUES (?, ?, ?, ?, ?, ?, ?)
-                            """, (name, sku, cat_opts.get(cat_name), sup_opts.get(sup_name), cost, price, qty))
+                                VALUES (?, ?, ?, NULL, ?, ?, ?)
+                            """, (name, sku, cat_opts.get(cat_name), cost, price, qty))
                             st.success(f"Product '{name}' added successfully!")
                             st.rerun()
                         except Exception as e:
@@ -226,33 +219,51 @@ def render_sales():
             prod_sel = st.selectbox("Select Product", list(prod_dict.keys()) if prod_dict else ["No products available"])
             customer = st.text_input("Customer Name (Sold to whom?)")
             
+            custom_price = st.number_input("Custom Sold Price (₹) - Optional", min_value=0.0, step=0.01, value=0.0, help="Leave as 0.0 to use the default product price")
             qty = st.number_input("Quantity Sold", min_value=1, step=1)
             notes = st.text_input("Additional Notes (Optional)")
             
             if st.form_submit_button("Complete Sale"):
                 if prod_dict:
-                    pid, price, max_qty = prod_dict[prod_sel]
+                    pid, default_price, max_qty = prod_dict[prod_sel]
+                    final_price = custom_price if custom_price > 0 else default_price
                     if not customer:
                         st.error("Please enter the customer name.")
                     elif qty > max_qty:
                         st.error(f"Cannot sell {qty}. Only {max_qty} in stock!")
                     else:
-                        order_num = db.record_sale(pid, qty, price, customer, notes)
-                        st.success(f"Sale recorded! Order: {order_num} | Total: ₹{qty * price:.2f}")
+                        order_num = db.record_sale(pid, qty, final_price, customer, notes)
+                        st.success(f"Sale recorded! Order: {order_num} | Total: ₹{qty * final_price:.2f}")
                         st.rerun()
                 else:
                     st.error("No products available.")
     
     with col2:
-        st.markdown("### Recent Sales history")
+        st.markdown("### Recent Sales History")
         sales = db.get_recent_sales()
         if not sales.empty:
             st.dataframe(
-                sales.style.format({'unit_price': '₹{:.2f}', 'total': '₹{:.2f}'}),
-                use_container_width=True, hide_index=True
+                sales[['order_number', 'customer_name', 'product_name', 'quantity', 'unit_price', 'total', 'status', 'created_at']]
+                .style.apply(lambda row: ['color: #ef4444' if row['status'] == 'revoked' else ''] * len(row), axis=1)
+                .format({'unit_price': '₹{:.2f}', 'total': '₹{:.2f}'}),
+                hide_index=True, use_container_width=True
             )
+            
+            st.markdown("### Revoke a Sale")
+            valid_sales = sales[sales['status'] != 'revoked']
+            if not valid_sales.empty:
+                with st.form("revoke_form"):
+                    revoke_opts = {f"{r['order_number']} - {r['product_name']} (Qty: {r['quantity']})": r['order_id'] for _, r in valid_sales.iterrows()}
+                    selected_revoke = st.selectbox("Select Order to Revoke", list(revoke_opts.keys()))
+                    if st.form_submit_button("🚫 Revoke Selected Sale"):
+                        order_id = revoke_opts[selected_revoke]
+                        db.revoke_sale(order_id)
+                        st.success("Sale revoked! Stock has been returned and revenue deducted.")
+                        st.rerun()
+            else:
+                st.info("No active sales available to revoke.")
         else:
-            st.info("No recent sales.")
+            st.info("No sales yet.")
 
 def render_movements():
     st.markdown('<div class="section-header"><h2>🔄 Stock Movements</h2></div>', unsafe_allow_html=True)
@@ -369,8 +380,6 @@ def main():
         if role in ["write", "admin"]:
             options.insert(1, "Point of Sale")
             icons.insert(1, "cart-check")
-            options.append("Stock Movements")
-            icons.append("arrow-left-right")
             
         if role == "admin":
             options.append("User Management")
@@ -411,8 +420,6 @@ def main():
         render_sales()
     elif selected == "Products":
         render_products()
-    elif selected == "Stock Movements":
-        render_movements()
     elif selected == "User Management":
         render_admin()
 

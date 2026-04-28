@@ -286,34 +286,57 @@ def record_sale(product_id, quantity, unit_price, customer_name, notes=""):
 
 def get_recent_sales():
     return fetch_df("""
-        SELECT so.order_number, so.customer_name, p.name as product_name,
+        SELECT so.id as order_id, so.order_number, so.customer_name, p.name as product_name,
                si.quantity, si.unit_price, (si.quantity * si.unit_price) as total,
-               so.created_at
+               so.created_at, so.status
         FROM sales_orders so
         JOIN sale_items si ON so.id = si.order_id
         JOIN products p ON si.product_id = p.id
         ORDER BY so.created_at DESC
     """)
 
-def get_dashboard_stats():
-    df1 = fetch_df("SELECT COUNT(*) as c FROM products WHERE is_active=1")
-    df2 = fetch_df("SELECT COUNT(*) as c FROM products WHERE quantity<=min_stock AND is_active=1")
-    df3 = fetch_df("SELECT COALESCE(SUM(quantity*cost_price),0) as c FROM products WHERE is_active=1")
-    df4 = fetch_df("SELECT COUNT(*) as c FROM suppliers")
-    df5 = fetch_df("SELECT COUNT(*) as c FROM sales_orders WHERE date(created_at)=date('now')")
-    df6 = fetch_df("SELECT COALESCE(SUM(total_amount),0) as c FROM sales_orders WHERE date(created_at)=date('now')")
-    df7 = fetch_df("SELECT COUNT(*) as c FROM purchase_orders WHERE status='pending'")
-    df8 = fetch_df("SELECT COUNT(*) as c FROM products WHERE quantity=0 AND is_active=1")
+def revoke_sale(order_id):
+    # Fetch all items in the order
+    items = fetch_df("SELECT product_id, quantity FROM sale_items WHERE order_id=?", (order_id,))
     
+    # Restore quantities
+    for _, row in items.iterrows():
+        execute_query("UPDATE products SET quantity = quantity + ?, updated_at=datetime('now') WHERE id=?", 
+                      (int(row['quantity']), int(row['product_id'])))
+        # Optional: log the revocation as a stock movement
+        add_stock_movement(int(row['product_id']), "adjustment_in", int(row['quantity']), 0, f"Revoke Order {order_id}", "Sale Revoked")
+        
+    # Mark order as revoked
+    execute_query("UPDATE sales_orders SET status='revoked' WHERE id=?", (order_id,))
+
+def get_dashboard_stats():
+    query = """
+    SELECT 
+        (SELECT COUNT(*) FROM products WHERE is_active=1) as total_products,
+        (SELECT COUNT(*) FROM products WHERE quantity<=min_stock AND is_active=1) as low_stock,
+        (SELECT COALESCE(SUM(quantity*cost_price),0) FROM products WHERE is_active=1) as inventory_value,
+        (SELECT COUNT(*) FROM sales_orders WHERE date(created_at)=date('now') AND status!='revoked') as sales_today,
+        (SELECT COALESCE(SUM(total_amount),0) FROM sales_orders WHERE date(created_at)=date('now') AND status!='revoked') as revenue_today,
+        (SELECT COALESCE(SUM(total_amount),0) FROM sales_orders WHERE date(created_at)=date('now', '-1 day') AND status!='revoked') as revenue_yesterday,
+        (SELECT COUNT(*) FROM purchase_orders WHERE status='pending') as pending_po,
+        (SELECT COUNT(*) FROM products WHERE quantity=0 AND is_active=1) as out_of_stock
+    """
+    df = fetch_df(query)
+    
+    if df.empty:
+        return {"total_products": 0, "low_stock": 0, "inventory_value": 0, "sales_today": 0, 
+                "revenue_today": 0, "revenue_yesterday": 0, "pending_po": 0, "out_of_stock": 0}
+                
+    row = df.iloc[0]
     return {
-        "total_products": df1['c'].iloc[0] if not df1.empty else 0,
-        "low_stock": df2['c'].iloc[0] if not df2.empty else 0,
-        "inventory_value": round(df3['c'].iloc[0], 2) if not df3.empty else 0,
-        "total_suppliers": df4['c'].iloc[0] if not df4.empty else 0,
-        "sales_today": df5['c'].iloc[0] if not df5.empty else 0,
-        "revenue_today": round(df6['c'].iloc[0], 2) if not df6.empty else 0,
-        "pending_po": df7['c'].iloc[0] if not df7.empty else 0,
-        "out_of_stock": df8['c'].iloc[0] if not df8.empty else 0
+        "total_products": int(row['total_products']),
+        "low_stock": int(row['low_stock']),
+        "inventory_value": float(row['inventory_value']),
+        "sales_today": int(row['sales_today']),
+        "revenue_today": float(row['revenue_today']),
+        "revenue_yesterday": float(row['revenue_yesterday']),
+        "pending_po": int(row['pending_po']),
+        "out_of_stock": int(row['out_of_stock'])
     }
 
 def get_category_stock_value():
@@ -340,7 +363,7 @@ def get_sales_trend(days=30):
         SELECT date(created_at) as date, COUNT(*) as orders,
                SUM(total_amount) as revenue
         FROM sales_orders
-        WHERE created_at >= datetime('now','-{days} days')
+        WHERE created_at >= datetime('now','-{days} days') AND status!='revoked'
         GROUP BY date(created_at) ORDER BY date
     """)
 
