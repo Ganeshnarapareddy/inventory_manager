@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import sqlite3
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
@@ -464,7 +465,17 @@ def render_analytics():
 
 def render_auth():
     st.markdown('<div style="max-width: 400px; margin: 100px auto;">', unsafe_allow_html=True)
-    st.markdown('<div class="section-header" style="border-radius: 12px; text-align: center; margin-bottom: 2rem;"><h2>🔒 NexGen Login</h2></div>', unsafe_allow_html=True)
+    
+    # Render logo in the center
+    try:
+        with open("logo.png", "rb") as f:
+            logo_b64 = base64.b64encode(f.read()).decode()
+            img_tag = f'<img src="data:image/png;base64,{logo_b64}" width="120" style="display:block; margin: 0 auto 20px auto; border-radius: 12px;">'
+            st.markdown(img_tag, unsafe_allow_html=True)
+    except:
+        pass
+        
+    st.markdown('<div class="section-header" style="border-radius: 12px; text-align: center; margin-bottom: 2rem;"><h2>🔒 Portal Login</h2></div>', unsafe_allow_html=True)
     
     with st.form("login_form"):
         username = st.text_input("Username")
@@ -477,7 +488,6 @@ def render_auth():
                 st.session_state['user'] = user['username']
                 st.session_state['role'] = user['role']
                 st.session_state['account_id'] = user['account_id']
-                st.session_state['show_loading'] = True
                 st.rerun()
             else:
                 st.error("Invalid username or password")
@@ -507,117 +517,17 @@ def main():
         render_auth()
         return
 
-    if st.session_state.get('show_loading', False):
-        st.session_state['show_loading'] = False
-        splash_html = """
-<div id="splash-screen">
-    <div class="logo-text">NexGen Inventory</div>
-    <div class="made-by">Made by Ganesh Narapareddy</div>
-    <div class="loader"></div>
-</div>
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
-
-#splash-screen {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: radial-gradient(circle at center, #1e1b4b 0%, #020617 100%);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    z-index: 999999;
-    color: white;
-    font-family: 'Inter', sans-serif;
-    animation: hideSplash 3.5s forwards;
-}
-
-.logo-text {
-    font-family: 'Orbitron', sans-serif;
-    font-size: 4rem;
-    font-weight: 700;
-    background: linear-gradient(135deg, #a5b4fc 0%, #818cf8 50%, #c084fc 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    margin-bottom: 15px;
-    opacity: 0;
-    animation: slideDown 1s cubic-bezier(0.4, 0, 0.2, 1) 0.2s forwards;
-}
-
-.made-by {
-    font-size: 1.5rem;
-    color: #94a3b8;
-    letter-spacing: 4px;
-    text-transform: uppercase;
-    margin-bottom: 50px;
-    opacity: 0;
-    animation: slideUp 1s cubic-bezier(0.4, 0, 0.2, 1) 0.6s forwards;
-}
-
-.loader {
-    width: 60px;
-    height: 60px;
-    position: relative;
-    opacity: 0;
-    animation: fadeIn 1s ease-in 1s forwards;
-}
-
-.loader:before, .loader:after {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    border: 4px solid transparent;
-    border-top-color: #818cf8;
-    animation: spin 1.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
-}
-
-.loader:after {
-    border-top-color: #c084fc;
-    animation: spin 1s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite reverse;
-}
-
-@keyframes spin {
-    0% { transform: rotate(0deg) scale(1); }
-    50% { transform: rotate(180deg) scale(1.1); }
-    100% { transform: rotate(360deg) scale(1); }
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-}
-
-@keyframes slideDown {
-    from { opacity: 0; transform: translateY(-30px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes slideUp {
-    from { opacity: 0; transform: translateY(30px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes hideSplash {
-    0% { opacity: 1; visibility: visible; }
-    80% { opacity: 1; visibility: visible; }
-    100% { opacity: 0; visibility: hidden; pointer-events: none; }
-}
-</style>
-"""
-        st.markdown(splash_html, unsafe_allow_html=True)
-
     role = st.session_state.get('role', 'read')
     account_id = st.session_state.get('account_id', 1)
     
     with st.sidebar:
-        st.markdown(f"<h1>NexGen Inventory</h1><div style='text-align:center; color:#a5b4fc; margin-bottom: 20px;'>{_('Welcome', st.session_state['lang'])}, {st.session_state['user']} ({role.upper()})</div>", unsafe_allow_html=True)
+        try:
+            st.image("logo.png", use_container_width=True)
+        except:
+            st.markdown("<h1>NexGen Inventory</h1>", unsafe_allow_html=True)
+            
+        st.markdown("<p style='text-align:center; color:#94a3b8; font-size: 0.9rem; font-weight: 500; margin-top: -15px;'>Made by Ganesh Narapareddy</p>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align:center; color:#a5b4fc; margin-bottom: 20px;'>{_('Welcome', st.session_state['lang'])}, {st.session_state['user']} ({role.upper()})</div>", unsafe_allow_html=True)
         
         # Language Toggle
         lang_idx = 0 if st.session_state['lang'] == 'en' else 1
@@ -716,6 +626,72 @@ def main():
         render_super_admin()
     elif selected == "Analytics":
         render_analytics()
+
+    # Footer Injection
+    try:
+        with open("logo.png", "rb") as f:
+            logo_b64 = base64.b64encode(f.read()).decode()
+            img_tag = f'<img src="data:image/png;base64,{logo_b64}" width="24" style="margin-right:10px; vertical-align: middle; border-radius: 4px;">'
+    except Exception:
+        img_tag = ''
+        
+    footer_html = f"""
+    <style>
+    .global-footer {{
+        position: fixed;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        background-color: #020617;
+        color: #94a3b8;
+        padding: 15px 0;
+        font-family: 'Inter', sans-serif;
+        font-size: 0.85rem;
+        border-top: 1px solid rgba(255,255,255,0.05);
+        z-index: 99999;
+        display: flex;
+        justify-content: center;
+    }}
+    .footer-content {{
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+        max-width: 1400px;
+        padding: 0 40px;
+    }}
+    .footer-links a {{
+        color: #94a3b8;
+        text-decoration: none;
+        margin-left: 20px;
+        transition: color 0.2s;
+    }}
+    .footer-links a:hover {{
+        color: #c084fc;
+    }}
+    /* Add padding to bottom to prevent footer overlap */
+    .block-container {{
+        padding-bottom: 100px !important;
+    }}
+    </style>
+    <div class="global-footer">
+        <div class="footer-content">
+            <div style="display:flex; align-items:center; font-weight: 600; color: white;">
+                {img_tag}
+                NexGen Inventory
+            </div>
+            <div>
+                Made by Ganesh Narapareddy | Copyright © 2026
+            </div>
+            <div class="footer-links">
+                <a href="#">Privacy Policy</a>
+                <a href="#">Terms of Service</a>
+                <a href="#">Support</a>
+            </div>
+        </div>
+    </div>
+    """
+    st.markdown(footer_html, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
