@@ -279,13 +279,7 @@ def get_all_accounts():
 
 def create_account(name):
     account_id = execute_query("INSERT INTO accounts(name) VALUES(?)", (name,))
-    # Auto-populate beverage categories
-    categories = ['Soft Drinks', 'Beer', 'Wine', 'Whiskey', 'Vodka', 'Rum', 'Brandy', 'Gin', 'Tequila', 'Scotch', 'Juices', 'Water', 'Energy Drinks', 'Champagne', 'Cognac']
-    for cat in categories:
-        try:
-            execute_query("INSERT INTO categories(account_id, name) VALUES(?, ?)", (account_id, cat))
-        except Exception:
-            pass # ignore duplicates
+    # Categories are global and auto-populated by get_categories()
     return account_id
 
 def delete_account(account_id):
@@ -297,22 +291,23 @@ def delete_account(account_id):
     execute_query("DELETE FROM stock_movements WHERE product_id IN (SELECT id FROM products WHERE account_id=?)", (account_id,))
     execute_query("DELETE FROM adjustments WHERE product_id IN (SELECT id FROM products WHERE account_id=?)", (account_id,))
     execute_query("DELETE FROM products WHERE account_id=?", (account_id,))
-    execute_query("DELETE FROM categories WHERE account_id=?", (account_id,))
     execute_query("DELETE FROM suppliers WHERE account_id=?", (account_id,))
     execute_query("DELETE FROM users WHERE account_id=?", (account_id,))
     execute_query("DELETE FROM accounts WHERE id=?", (account_id,))
 
 # ── Categories & Suppliers ───────────────────────────────────────────────────────────
-def get_categories(account_id):
-    cats = fetch_df("SELECT id, name FROM categories WHERE account_id=? ORDER BY name", (account_id,))
-    if cats.empty:
-        categories = ['Soft Drinks', 'Beer', 'Wine', 'Whiskey', 'Vodka', 'Rum', 'Brandy', 'Scotch', 'Gin', 'Tequila', 'Juices', 'Water', 'Energy Drinks', 'Champagne', 'Cognac']
-        for cat in categories:
+def get_categories(account_id=None):
+    cats = fetch_df("SELECT id, name FROM categories ORDER BY name")
+    beverage_cats = ['Soft Drinks', 'Beer', 'Wine', 'Whiskey', 'Vodka', 'Rum', 'Brandy', 'Scotch', 'Gin', 'Tequila', 'Juices', 'Water', 'Energy Drinks', 'Champagne', 'Cognac']
+    existing = set(cats['name'].tolist()) if not cats.empty else set()
+    for cat in beverage_cats:
+        if cat not in existing:
             try:
-                execute_query("INSERT INTO categories(account_id, name) VALUES(?, ?)", (account_id, cat))
+                execute_query("INSERT INTO categories(name, description) VALUES(?, ?)", (cat, f"{cat} products"))
             except Exception:
                 pass
-        cats = fetch_df("SELECT id, name FROM categories WHERE account_id=? ORDER BY name", (account_id,))
+    if len(existing) < len(beverage_cats):
+        cats = fetch_df("SELECT id, name FROM categories ORDER BY name")
     return cats
 
 def get_products_full(account_id):
