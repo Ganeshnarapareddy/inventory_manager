@@ -1,0 +1,55 @@
+# lang.py
+translations = {
+    'te': {
+        'Dashboard': 'డాష్‌బోర్డ్',
+        'Point of Sale': 'విక్రయ కేంద్రం',
+        'Products': 'ఉత్పత్తులు',
+        'User Management': 'వినియోగదారుల నిర్వహణ',
+        'Super Admin': 'సూపర్ అడ్మిన్',
+        'Executive Dashboard': 'ఎగ్జిక్యూటివ్ డాష్‌బోర్డ్',
+        'Total Products': 'మొత్తం ఉత్పత్తులు',
+        'Inventory Value': 'ఇన్వెంటరీ విలువ',
+        'Low Stock Items': 'తక్కువ స్టాక్ ఉన్న వస్తువులు',
+        'Revenue Today': 'నేటి ఆదాయం',
+        'Daily Revenue Trend': 'రోజువారీ ఆదాయ ట్రెండ్',
+        'Category Value Distribution': 'వర్గాల విలువ పంపిణీ',
+        'Action Required: Low Stock Alerts': 'చర్య అవసరం: తక్కువ స్టాక్ హెచ్చరికలు',
+        'All products are well stocked!': 'అన్ని ఉత్పత్తులకు తగినంత స్టాక్ ఉంది!',
+        'Record New Sale': 'కొత్త విక్రయాన్ని నమోదు చేయండి',
+        'Recent Sales History': 'ఇటీవలి విక్రయాల చరిత్ర',
+        'Revoke a Sale': 'విక్రయాన్ని రద్దు చేయండి',
+        'Product Catalog': 'ఉత్పత్తుల జాబితా',
+        'Browse Inventory': 'ఇన్వెంటరీని బ్రౌజ్ చేయండి',
+        'Add Product': 'ఉత్పత్తిని జోడించండి',
+        'Edit Product': 'ఉత్పత్తిని సవరించండి',
+        'Welcome': 'స్వాగతం',
+        'Change Password': 'పాస్వర్డ్ మార్చండి',
+        'Logout': 'లాగ్అవుట్',
+        'Language': 'భాష (Language)',
+        'Active Account': 'క్రియాశీల ఖాతా',
+        'Create New Account': 'కొత్త ఖాతాను సృష్టించండి',
+        'Create User': 'వినియోగదారుని సృష్టించండి',
+        'from yesterday': 'నిన్నటి నుండి',
+        'Select Product': 'ఉత్పత్తిని ఎంచుకోండి',
+        'Customer Name (Sold to whom?)': 'కస్టమర్ పేరు',
+        'Custom Sold Price (₹) - Optional': 'కస్టమ్ విక్రయ ధర (₹) - ఐచ్ఛికం',
+        'Quantity Sold': 'విక్రయించిన పరిమాణం',
+        'Additional Notes (Optional)': 'అదనపు గమనికలు (ఐచ్ఛికం)',
+        'Complete Sale': 'విక్రయాన్ని పూర్తి చేయండి',
+        'No products available.': 'ఎలాంటి ఉత్పత్తులు అందుబాటులో లేవు.',
+        'No sales yet.': 'ఇంకా విక్రయాలు లేవు.',
+        'Revoke Selected Sale': 'ఎంచుకున్న విక్రయాన్ని రద్దు చేయండి',
+        'Sale revoked! Stock has been returned and revenue deducted.': 'విక్రయం రద్దు చేయబడింది! స్టాక్ తిరిగి ఇవ్వబడింది మరియు ఆదాయం తగ్గించబడింది.',
+        'No active sales available to revoke.': 'రద్దు చేయడానికి క్రియాశీల విక్రయాలు అందుబాటులో లేవు.',
+        'Username': 'యూజర్ పేరు',
+        'Password': 'పాస్వర్డ్',
+        'Role': 'పాత్ర',
+        'Add User': 'వినియోగదారుని జోడించండి',
+        'Existing Users': 'ఉన్న వినియోగదారులు',
+    }
+}
+
+def _(text, lang='en'):
+    if lang == 'en':
+        return text
+    return translations.get('te', {}).get(text, text)

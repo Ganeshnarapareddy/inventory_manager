@@ -6,6 +6,7 @@ from datetime import datetime
 from streamlit_option_menu import option_menu
 import db
 import styles
+from lang import _
 
 st.set_page_config(
     page_title="NexGen Inventory Pro",
@@ -18,8 +19,10 @@ st.markdown(styles.CSS, unsafe_allow_html=True)
 db.init_db()
 
 def render_dashboard():
-    st.markdown('<div class="section-header"><h2>📊 Executive Dashboard</h2></div>', unsafe_allow_html=True)
-    stats = db.get_dashboard_stats()
+    account_id = st.session_state.get('account_id', 1)
+    lang = st.session_state.get('lang', 'en')
+    st.markdown(f'<div class="section-header"><h2>📊 {_("Executive Dashboard", lang)}</h2></div>', unsafe_allow_html=True)
+    stats = db.get_dashboard_stats(account_id)
     
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -47,8 +50,8 @@ def render_dashboard():
             </div>
         ''', unsafe_allow_html=True)
     with col4:
-        st.metric(label="Revenue Today", value=f"₹{stats['revenue_today']:,.2f}", 
-                  delta=f"₹{stats['revenue_today'] - stats['revenue_yesterday']:,.2f} from yesterday",
+        st.metric(label=_("Revenue Today", lang), value=f"₹{stats['revenue_today']:,.2f}", 
+                  delta=f"₹{stats['revenue_today'] - stats['revenue_yesterday']:,.2f} " + _("from yesterday", lang),
                   delta_color="normal")
         st.markdown('</div>', unsafe_allow_html=True)
     
@@ -56,8 +59,8 @@ def render_dashboard():
     c1, c2 = st.columns(2)
     
     with c1:
-        st.markdown('### 📈 Daily Revenue Trend')
-        trend_df = db.get_sales_trend()
+        st.markdown(f'### 📈 {_("Daily Revenue Trend", lang)}')
+        trend_df = db.get_sales_trend(account_id)
         if not trend_df.empty:
             fig = px.bar(trend_df, x='date', y='revenue', 
                          color_discrete_sequence=['#6366f1'],
@@ -67,11 +70,11 @@ def render_dashboard():
                               margin=dict(l=0, r=0, t=30, b=0))
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("No sales data available.")
+            st.info(_("No sales data available.", lang))
 
     with c2:
-        st.markdown('### 🍩 Category Value Distribution')
-        cat_df = db.get_category_stock_value()
+        st.markdown(f'### 🍩 {_("Category Value Distribution", lang)}')
+        cat_df = db.get_category_stock_value(account_id)
         if not cat_df.empty:
             fig = px.pie(cat_df, values='value', names='category', hole=0.6,
                          color_discrete_sequence=px.colors.sequential.Purp,
@@ -83,35 +86,49 @@ def render_dashboard():
         else:
             st.info("No category data available.")
 
-    st.markdown('### ⚠️ Action Required: Low Stock Alerts')
-    low_stock = db.get_low_stock()
+    st.markdown(f'### ⚠️ {_("Action Required: Low Stock Alerts", lang)}')
+    low_stock = db.get_low_stock(account_id)
     if not low_stock.empty:
         st.dataframe(low_stock[['name', 'sku', 'quantity', 'min_stock', 'category']], use_container_width=True, hide_index=True)
     else:
-        st.success("All products are well stocked!")
+        st.success(_("All products are well stocked!", lang))
+
+def render_super_admin():
+    lang = st.session_state.get('lang', 'en')
+    st.markdown(f'<div class="section-header"><h2>🌍 {_("Super Admin", lang)}</h2></div>', unsafe_allow_html=True)
+    
+    st.markdown("### " + _("Create New Account", lang))
+    with st.form("new_account_form"):
+        acc_name = st.text_input("Account Name")
+        if st.form_submit_button("Create Account"):
+            db.create_account(acc_name)
+            st.success(f"Account {acc_name} created!")
+            st.rerun()
 
 def render_products():
-    st.markdown('<div class="section-header"><h2>📦 Product Catalog</h2></div>', unsafe_allow_html=True)
+    lang = st.session_state.get('lang', 'en')
+    account_id = st.session_state.get('account_id', 1)
+    st.markdown(f'<div class="section-header"><h2>📦 {_("Product Catalog", lang)}</h2></div>', unsafe_allow_html=True)
     
     role = st.session_state.get('role', 'read')
-    tabs_list = ["Browse Inventory"]
-    if role in ["write", "admin"]:
-        tabs_list.extend(["Add Product", "Edit Product"])
+    tabs_list = [_("Browse Inventory", lang)]
+    if role in ["write", "admin", "root"]:
+        tabs_list.extend([_("Add Product", lang), _("Edit Product", lang)])
         
     tabs = st.tabs(tabs_list)
     
     with tabs[0]:
-        df = db.get_products_full()
+        df = db.get_products_full(account_id)
         if not df.empty:
             def clear_search():
                 st.session_state.search_input = ""
                 
             sc1, sc2 = st.columns([5, 1])
             with sc1:
-                search = st.text_input("🔍 Search products by name, SKU, or category...", key="search_input")
+                search = st.text_input("🔍 " + _("Search products by name, SKU, or category...", lang), key="search_input")
             with sc2:
                 st.markdown("<br>", unsafe_allow_html=True)
-                st.button("✖ Clear", use_container_width=True, on_click=clear_search)
+                st.button("✖ " + _("Clear", lang), use_container_width=True, on_click=clear_search)
 
             if search:
                 mask = df.astype(str).apply(lambda x: x.str.contains(search, case=False)).any(axis=1)
@@ -129,16 +146,16 @@ def render_products():
                 width='stretch', hide_index=True, height=400
             )
         else:
-            st.info("Inventory is empty.")
+            st.info(_("Inventory is empty.", lang))
 
-    if role in ["write", "admin"]:
+    if role in ["write", "admin", "root"]:
         with tabs[1]:
             with st.form("add_product_form"):
                 c1, c2 = st.columns(2)
                 name = c1.text_input("Product Name*")
                 sku = c2.text_input("SKU*")
                 
-                categories = db.fetch_df("SELECT id, name FROM categories")
+                categories = db.fetch_df("SELECT id, name FROM categories WHERE account_id=?", (account_id,))
                 cat_opts = dict(zip(categories['name'], categories['id'])) if not categories.empty else {}
                 
                 c3, c4 = st.columns(2)
@@ -149,22 +166,22 @@ def render_products():
                 price = c6.number_input("Selling Price (₹)", min_value=0.0, step=0.01)
                 qty = c7.number_input("Initial Quantity", min_value=0, step=1)
                 
-                if st.form_submit_button("➕ Add Product"):
+                if st.form_submit_button("➕ " + _("Add Product", lang)):
                     if not name or not sku:
                         st.error("Name and SKU are required!")
                     else:
                         try:
                             db.execute_query("""
-                                INSERT INTO products (name, sku, category_id, supplier_id, cost_price, selling_price, quantity)
-                                VALUES (?, ?, ?, NULL, ?, ?, ?)
-                            """, (name, sku, cat_opts.get(cat_name), cost, price, qty))
+                                INSERT INTO products (account_id, name, sku, category_id, supplier_id, cost_price, selling_price, quantity)
+                                VALUES (?, ?, ?, ?, NULL, ?, ?, ?)
+                            """, (account_id, name, sku, cat_opts.get(cat_name), cost, price, qty))
                             st.success(f"Product '{name}' added successfully!")
                             st.rerun()
                         except Exception as e:
                             st.error(f"Error: {e}")
 
         with tabs[2]:
-            products_df = db.fetch_df("SELECT id, name, sku, cost_price, selling_price, quantity, min_stock FROM products WHERE is_active=1")
+            products_df = db.fetch_df("SELECT id, name, sku, cost_price, selling_price, quantity, min_stock FROM products WHERE is_active=1 AND account_id=?", (account_id,))
             if not products_df.empty:
                 prod_edit_sel = st.selectbox("Select Product to Edit", products_df['name'].tolist())
                 selected_prod = products_df[products_df['name'] == prod_edit_sel].iloc[0]
@@ -192,8 +209,8 @@ def render_products():
                                 try:
                                     db.execute_query("""
                                         UPDATE products SET name=?, sku=?, cost_price=?, selling_price=?, quantity=?, min_stock=?, updated_at=datetime('now')
-                                        WHERE id=?
-                                    """, (new_name, new_sku, new_cost, new_price, new_qty, new_min, int(selected_prod['id'])))
+                                        WHERE id=? AND account_id=?
+                                    """, (new_name, new_sku, new_cost, new_price, new_qty, new_min, int(selected_prod['id']), account_id))
                                     st.success(f"Product '{new_name}' updated successfully!")
                                     st.rerun()
                                 except Exception as e:
@@ -207,23 +224,25 @@ def render_products():
                 st.info("No products available to edit.")
 
 def render_sales():
-    st.markdown('<div class="section-header"><h2>🛒 Point of Sale</h2></div>', unsafe_allow_html=True)
+    lang = st.session_state.get('lang', 'en')
+    account_id = st.session_state.get('account_id', 1)
+    st.markdown(f'<div class="section-header"><h2>🛒 {_("Point of Sale", lang)}</h2></div>', unsafe_allow_html=True)
     
     col1, col2 = st.columns([1, 2])
     with col1:
-        st.markdown("### Record New Sale")
+        st.markdown(f"### {_('Record New Sale', lang)}")
         with st.form("sale_form"):
-            products = db.fetch_df("SELECT id, name, quantity, selling_price FROM products WHERE is_active=1")
+            products = db.fetch_df("SELECT id, name, quantity, selling_price FROM products WHERE is_active=1 AND account_id=?", (account_id,))
             prod_dict = {f"{r['name']} (₹{r['selling_price']:.2f} | Stock: {r['quantity']})": (r['id'], r['selling_price'], r['quantity']) for _, r in products.iterrows()}
             
-            prod_sel = st.selectbox("Select Product", list(prod_dict.keys()) if prod_dict else ["No products available"])
-            customer = st.text_input("Customer Name (Sold to whom?)")
+            prod_sel = st.selectbox(_("Select Product", lang), list(prod_dict.keys()) if prod_dict else [_("No products available.", lang)])
+            customer = st.text_input(_("Customer Name (Sold to whom?)", lang))
             
-            custom_price = st.number_input("Custom Sold Price (₹) - Optional", min_value=0.0, step=0.01, value=None, placeholder="Leave blank to use default price")
-            qty = st.number_input("Quantity Sold", min_value=1, step=1)
-            notes = st.text_input("Additional Notes (Optional)")
+            custom_price = st.number_input(_("Custom Sold Price (₹) - Optional", lang), min_value=0.0, step=0.01, value=None, placeholder="Leave blank to use default price")
+            qty = st.number_input(_("Quantity Sold", lang), min_value=1, step=1)
+            notes = st.text_input(_("Additional Notes (Optional)", lang))
             
-            if st.form_submit_button("Complete Sale"):
+            if st.form_submit_button(_("Complete Sale", lang)):
                 if prod_dict:
                     pid, default_price, max_qty = prod_dict[prod_sel]
                     final_price = custom_price if custom_price is not None else default_price
@@ -232,15 +251,15 @@ def render_sales():
                     elif qty > max_qty:
                         st.error(f"Cannot sell {qty}. Only {max_qty} in stock!")
                     else:
-                        order_num = db.record_sale(pid, qty, final_price, customer, notes)
+                        order_num = db.record_sale(account_id, pid, qty, final_price, customer, notes)
                         st.success(f"Sale recorded! Order: {order_num} | Total: ₹{qty * final_price:.2f}")
                         st.rerun()
                 else:
-                    st.error("No products available.")
+                    st.error(_("No products available.", lang))
     
     with col2:
-        st.markdown("### Recent Sales History")
-        sales = db.get_recent_sales()
+        st.markdown(f"### {_('Recent Sales History', lang)}")
+        sales = db.get_recent_sales(account_id)
         if not sales.empty:
             st.dataframe(
                 sales[['order_number', 'customer_name', 'product_name', 'quantity', 'unit_price', 'total', 'status', 'created_at']]
@@ -249,21 +268,21 @@ def render_sales():
                 hide_index=True, use_container_width=True
             )
             
-            st.markdown("### Revoke a Sale")
+            st.markdown(f"### {_('Revoke a Sale', lang)}")
             valid_sales = sales[sales['status'] != 'revoked']
             if not valid_sales.empty:
                 with st.form("revoke_form"):
                     revoke_opts = {f"{r['order_number']} - {r['product_name']} (Qty: {r['quantity']})": r['order_id'] for _, r in valid_sales.iterrows()}
                     selected_revoke = st.selectbox("Select Order to Revoke", list(revoke_opts.keys()))
-                    if st.form_submit_button("🚫 Revoke Selected Sale"):
+                    if st.form_submit_button("🚫 " + _("Revoke Selected Sale", lang)):
                         order_id = revoke_opts[selected_revoke]
                         db.revoke_sale(order_id)
-                        st.success("Sale revoked! Stock has been returned and revenue deducted.")
+                        st.success(_("Sale revoked! Stock has been returned and revenue deducted.", lang))
                         st.rerun()
             else:
-                st.info("No active sales available to revoke.")
+                st.info(_("No active sales available to revoke.", lang))
         else:
-            st.info("No sales yet.")
+            st.info(_("No sales yet.", lang))
 
 def render_movements():
     st.markdown('<div class="section-header"><h2>🔄 Stock Movements</h2></div>', unsafe_allow_html=True)
@@ -296,30 +315,32 @@ def render_movements():
             st.dataframe(moves.head(20), width='stretch', hide_index=True)
 
 def render_admin():
-    st.markdown('<div class="section-header"><h2>🛡️ User Management</h2></div>', unsafe_allow_html=True)
+    lang = st.session_state.get('lang', 'en')
+    account_id = st.session_state.get('account_id', 1)
+    st.markdown(f'<div class="section-header"><h2>🛡️ {_("User Management", lang)}</h2></div>', unsafe_allow_html=True)
     
     col1, col2 = st.columns(2)
     with col1:
         with st.form("create_user_form"):
-            st.markdown("### Create New User")
-            new_user = st.text_input("Username")
-            new_pass = st.text_input("Temporary Password", type="password")
-            new_role = st.selectbox("Role", ["read", "write", "admin"])
+            st.markdown(f"### {_('Create User', lang)}")
+            new_user = st.text_input(_("Username", lang))
+            new_pass = st.text_input(_("Password", lang), type="password")
+            new_role = st.selectbox(_("Role", lang), ["read", "write", "admin"])
             
-            if st.form_submit_button("Create User"):
+            if st.form_submit_button(_("Add User", lang)):
                 if new_user and new_pass:
                     if db.get_user(new_user):
                         st.error("Username already exists!")
                     else:
-                        db.create_user(new_user, new_pass, new_role)
+                        db.create_user(new_user, new_pass, new_role, account_id)
                         st.success(f"User {new_user} created!")
                         st.rerun()
                 else:
                     st.error("Please fill all fields.")
                     
     with col2:
-        st.markdown("### Existing Users")
-        users_df = db.get_all_users()
+        st.markdown(f"### {_('Existing Users', lang)}")
+        users_df = db.get_all_users(account_id)
         if not users_df.empty:
             for _, row in users_df.iterrows():
                 with st.expander(f"👤 {row['username']} ({row['role']})"):
@@ -358,32 +379,57 @@ def render_auth():
             if user and db.verify_password(password, user['password_hash']):
                 st.session_state['user'] = user['username']
                 st.session_state['role'] = user['role']
+                st.session_state['account_id'] = user['account_id']
                 st.rerun()
             else:
                 st.error("Invalid username or password")
     st.markdown('</div>', unsafe_allow_html=True)
 
 def main():
+    if 'lang' not in st.session_state:
+        st.session_state['lang'] = 'en'
+        
     if 'user' not in st.session_state:
         render_auth()
         return
 
     role = st.session_state.get('role', 'read')
+    account_id = st.session_state.get('account_id', 1)
     
     with st.sidebar:
-        st.markdown(f"<h1>NexGen Inventory</h1><div style='text-align:center; color:#a5b4fc; margin-bottom: 20px;'>Welcome, {st.session_state['user']} ({role.upper()})</div>", unsafe_allow_html=True)
+        st.markdown(f"<h1>NexGen Inventory</h1><div style='text-align:center; color:#a5b4fc; margin-bottom: 20px;'>{_('Welcome', st.session_state['lang'])}, {st.session_state['user']} ({role.upper()})</div>", unsafe_allow_html=True)
+        
+        # Language Toggle
+        new_lang = st.radio(_("Language", st.session_state['lang']), options=['en', 'te'], horizontal=True, format_func=lambda x: "English" if x == 'en' else "తెలుగు")
+        if new_lang != st.session_state['lang']:
+            st.session_state['lang'] = new_lang
+            st.rerun()
+            
+        # Account Switcher for Root
+        if role == 'root':
+            accounts = db.get_all_accounts()
+            acc_opts = dict(zip(accounts['name'], accounts['id']))
+            current_acc_name = [k for k, v in acc_opts.items() if v == account_id]
+            sel_acc = st.selectbox(_("Active Account", st.session_state['lang']), list(acc_opts.keys()), index=list(acc_opts.keys()).index(current_acc_name[0]) if current_acc_name else 0)
+            if acc_opts[sel_acc] != account_id:
+                st.session_state['account_id'] = acc_opts[sel_acc]
+                st.rerun()
         
         # Build menu based on role
-        options = ["Dashboard", "Products"]
+        options = [_("Dashboard", st.session_state['lang']), _("Products", st.session_state['lang'])]
         icons = ["speedometer2", "box"]
         
-        if role in ["write", "admin"]:
-            options.insert(1, "Point of Sale")
+        if role in ["write", "admin", "root"]:
+            options.insert(1, _("Point of Sale", st.session_state['lang']))
             icons.insert(1, "cart-check")
             
-        if role == "admin":
-            options.append("User Management")
+        if role in ["admin", "root"]:
+            options.append(_("User Management", st.session_state['lang']))
             icons.append("shield-lock")
+            
+        if role == 'root':
+            options.append(_("Super Admin", st.session_state['lang']))
+            icons.append("globe")
             
         selected = option_menu(
             menu_title=None,
@@ -400,28 +446,30 @@ def main():
         )
         
         st.markdown("<br><hr style='border-color: rgba(255,255,255,0.1);'>", unsafe_allow_html=True)
-        with st.expander("🔑 Change Password"):
+        with st.expander("🔑 " + _("Change Password", st.session_state['lang'])):
             with st.form("change_pass_form"):
-                new_p = st.text_input("New Password", type="password")
+                new_p = st.text_input(_("Password", st.session_state['lang']), type="password")
                 if st.form_submit_button("Update"):
                     if new_p:
                         db.update_user_password(st.session_state['user'], new_p)
                         st.success("Updated!")
                     
-        if st.button("🚪 Logout", use_container_width=True):
+        if st.button("🚪 " + _("Logout", st.session_state['lang']), use_container_width=True):
             st.session_state.clear()
             st.rerun()
         
-        st.markdown("<div style='text-align:center; color:#64748b; font-size:0.8rem; margin-top: 20px;'>v2.0 Professional Edition</div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align:center; color:#64748b; font-size:0.8rem; margin-top: 20px;'>v2.0 SaaS Edition</div>", unsafe_allow_html=True)
 
-    if selected == "Dashboard":
+    if selected == _("Dashboard", st.session_state['lang']):
         render_dashboard()
-    elif selected == "Point of Sale":
+    elif selected == _("Point of Sale", st.session_state['lang']):
         render_sales()
-    elif selected == "Products":
+    elif selected == _("Products", st.session_state['lang']):
         render_products()
-    elif selected == "User Management":
+    elif selected == _("User Management", st.session_state['lang']):
         render_admin()
+    elif selected == _("Super Admin", st.session_state['lang']):
+        render_super_admin()
 
 if __name__ == "__main__":
     main()

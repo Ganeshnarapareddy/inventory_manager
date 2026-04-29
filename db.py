@@ -58,14 +58,21 @@ def fetch_df(query, params=()):
 
 def init_db():
     script = """
+        CREATE TABLE IF NOT EXISTS accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
         CREATE TABLE IF NOT EXISTS categories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id INTEGER NOT NULL,
             name TEXT UNIQUE NOT NULL,
             description TEXT,
             created_at TEXT DEFAULT (datetime('now'))
         );
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id INTEGER,
             username TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
             role TEXT DEFAULT 'read',
@@ -73,6 +80,7 @@ def init_db():
         );
         CREATE TABLE IF NOT EXISTS suppliers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id INTEGER NOT NULL,
             name TEXT NOT NULL,
             contact_person TEXT,
             email TEXT,
@@ -86,8 +94,9 @@ def init_db():
         );
         CREATE TABLE IF NOT EXISTS products (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id INTEGER NOT NULL,
             name TEXT NOT NULL,
-            sku TEXT UNIQUE NOT NULL,
+            sku TEXT NOT NULL,
             category_id INTEGER,
             supplier_id INTEGER,
             description TEXT,
@@ -119,7 +128,8 @@ def init_db():
         );
         CREATE TABLE IF NOT EXISTS purchase_orders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            po_number TEXT UNIQUE NOT NULL,
+            account_id INTEGER NOT NULL,
+            po_number TEXT NOT NULL,
             supplier_id INTEGER,
             status TEXT DEFAULT 'pending',
             order_date TEXT,
@@ -142,7 +152,8 @@ def init_db():
         );
         CREATE TABLE IF NOT EXISTS sales_orders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            order_number TEXT UNIQUE NOT NULL,
+            account_id INTEGER NOT NULL,
+            order_number TEXT NOT NULL,
             customer_name TEXT,
             customer_email TEXT,
             customer_phone TEXT,
@@ -180,15 +191,50 @@ def init_db():
         statements = [s.strip() for s in script.split(';') if s.strip()]
         for s in statements:
             conn.execute(s)
+            
+        # Migrations for existing tables
+        migrations = [
+            "ALTER TABLE categories ADD COLUMN account_id INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE users ADD COLUMN account_id INTEGER DEFAULT 1",
+            "ALTER TABLE suppliers ADD COLUMN account_id INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE products ADD COLUMN account_id INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE purchase_orders ADD COLUMN account_id INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE sales_orders ADD COLUMN account_id INTEGER NOT NULL DEFAULT 1"
+        ]
+        for m in migrations:
+            try:
+                conn.execute(m)
+            except Exception:
+                pass # Column already exists
     else:
         c = conn.cursor()
         c.executescript(script)
+        
+        # Migrations for sqlite
+        migrations = [
+            "ALTER TABLE categories ADD COLUMN account_id INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE users ADD COLUMN account_id INTEGER DEFAULT 1",
+            "ALTER TABLE suppliers ADD COLUMN account_id INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE products ADD COLUMN account_id INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE purchase_orders ADD COLUMN account_id INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE sales_orders ADD COLUMN account_id INTEGER NOT NULL DEFAULT 1"
+        ]
+        for m in migrations:
+            try:
+                c.execute(m)
+            except Exception:
+                pass
         conn.commit()
     
-    # Initialize admin user if no users exist
-    df = fetch_df("SELECT COUNT(*) as cnt FROM users")
+    # Initialize default account and root user
+    df = fetch_df("SELECT COUNT(*) as cnt FROM accounts")
     if df.empty or df['cnt'].iloc[0] == 0:
-        create_user("admin", "admin123", "admin")
+        execute_query("INSERT INTO accounts(id, name) VALUES(1, 'Default Account')")
+        
+    df_users = fetch_df("SELECT COUNT(*) as cnt FROM users")
+    if df_users.empty or df_users['cnt'].iloc[0] == 0:
+        hashed = hash_password("admin123")
+        execute_query("INSERT INTO users(username, password_hash, role, account_id) VALUES('admin', ?, 'root', 1)", (hashed,))
 
 # ── Auth & User helpers ───────────────────────────────────────────────────────
 def hash_password(password):
@@ -197,9 +243,9 @@ def hash_password(password):
 def verify_password(password, hashed):
     return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
 
-def create_user(username, password, role="read"):
+def create_user(username, password, role="read", account_id=1):
     hashed = hash_password(password)
-    execute_query("INSERT INTO users(username, password_hash, role) VALUES(?, ?, ?)", (username, hashed, role))
+    execute_query("INSERT INTO users(username, password_hash, role, account_id) VALUES(?, ?, ?, ?)", (username, hashed, role, account_id))
 
 def get_user(username):
     df = fetch_df("SELECT * FROM users WHERE username=?", (username,))
@@ -207,8 +253,10 @@ def get_user(username):
         return df.iloc[0].to_dict()
     return None
 
-def get_all_users():
-    return fetch_df("SELECT id, username, role, created_at FROM users ORDER BY created_at")
+def get_all_users(account_id=None):
+    if account_id:
+        return fetch_df("SELECT id, username, role, created_at, account_id FROM users WHERE account_id=? ORDER BY created_at", (account_id,))
+    return fetch_df("SELECT id, username, role, created_at, account_id FROM users ORDER BY created_at")
 
 def update_user_password(username, new_password):
     hashed = hash_password(new_password)
@@ -220,8 +268,15 @@ def delete_user(user_id):
 def update_user_role(user_id, role):
     execute_query("UPDATE users SET role=? WHERE id=?", (role, user_id))
 
+# ── Account helpers ───────────────────────────────────────────────────────────
+def get_all_accounts():
+    return fetch_df("SELECT id, name, created_at FROM accounts ORDER BY name")
+
+def create_account(name):
+    execute_query("INSERT INTO accounts(name) VALUES(?)", (name,))
+
 # ── Product helpers ───────────────────────────────────────────────────────────
-def get_products_full():
+def get_products_full(account_id):
     return fetch_df("""
         SELECT p.id, p.name, p.sku, c.name as category, s.name as supplier,
                p.unit, p.cost_price, p.selling_price, p.quantity, p.min_stock,
@@ -232,23 +287,23 @@ def get_products_full():
         FROM products p
         LEFT JOIN categories c ON p.category_id = c.id
         LEFT JOIN suppliers s ON p.supplier_id = s.id
-        WHERE p.is_active = 1
+        WHERE p.is_active = 1 AND p.account_id = ?
         ORDER BY p.name
-    """)
+    """, (account_id,))
 
 def soft_delete_product(product_id):
     execute_query("UPDATE products SET is_active=0 WHERE id=?", (product_id,))
 
-def get_low_stock():
+def get_low_stock(account_id):
     return fetch_df("""
         SELECT p.id, p.name, p.sku, p.quantity, p.min_stock,
                c.name as category, s.name as supplier
         FROM products p
         LEFT JOIN categories c ON p.category_id = c.id
         LEFT JOIN suppliers s ON p.supplier_id = s.id
-        WHERE p.quantity <= p.min_stock AND p.is_active=1
+        WHERE p.quantity <= p.min_stock AND p.is_active=1 AND p.account_id = ?
         ORDER BY p.quantity ASC
-    """)
+    """, (account_id,))
 
 def get_stock_movements():
     return fetch_df("""
@@ -267,14 +322,14 @@ def add_stock_movement(product_id, mtype, qty, unit_cost, ref, notes):
     elif mtype in ("sale","adjustment_out","damage"):
         execute_query("UPDATE products SET quantity=MAX(0,quantity-?), updated_at=datetime('now') WHERE id=?", (qty, product_id))
 
-def record_sale(product_id, quantity, unit_price, customer_name, notes=""):
-    order_num = generate_order_number()
+def record_sale(account_id, product_id, quantity, unit_price, customer_name, notes=""):
+    order_num = generate_order_number(account_id)
     total = quantity * unit_price
     
     order_id = execute_query("""
-        INSERT INTO sales_orders(order_number, customer_name, total_amount, notes, status, order_date)
-        VALUES(?, ?, ?, ?, 'completed', datetime('now'))
-    """, (order_num, customer_name, total, notes))
+        INSERT INTO sales_orders(account_id, order_number, customer_name, total_amount, notes, status, order_date)
+        VALUES(?, ?, ?, ?, ?, 'completed', datetime('now'))
+    """, (account_id, order_num, customer_name, total, notes))
     
     execute_query("""
         INSERT INTO sale_items(order_id, product_id, quantity, unit_price)
@@ -284,7 +339,7 @@ def record_sale(product_id, quantity, unit_price, customer_name, notes=""):
     add_stock_movement(product_id, "sale", quantity, unit_price, f"SO: {order_num}", f"Sold to: {customer_name}. {notes}")
     return order_num
 
-def get_recent_sales():
+def get_recent_sales(account_id):
     return fetch_df("""
         SELECT so.id as order_id, so.order_number, so.customer_name, p.name as product_name,
                si.quantity, si.unit_price, (si.quantity * si.unit_price) as total,
@@ -292,8 +347,9 @@ def get_recent_sales():
         FROM sales_orders so
         JOIN sale_items si ON so.id = si.order_id
         JOIN products p ON si.product_id = p.id
+        WHERE so.account_id = ?
         ORDER BY so.created_at DESC
-    """)
+    """, (account_id,))
 
 def revoke_sale(order_id):
     # Fetch all items in the order
@@ -306,19 +362,19 @@ def revoke_sale(order_id):
     # Mark order as revoked
     execute_query("UPDATE sales_orders SET status='revoked' WHERE id=?", (order_id,))
 
-def get_dashboard_stats():
+def get_dashboard_stats(account_id):
     query = """
     SELECT 
-        (SELECT COUNT(*) FROM products WHERE is_active=1) as total_products,
-        (SELECT COUNT(*) FROM products WHERE quantity<=min_stock AND is_active=1) as low_stock,
-        (SELECT COALESCE(SUM(quantity*cost_price),0) FROM products WHERE is_active=1) as inventory_value,
-        (SELECT COUNT(*) FROM sales_orders WHERE date(created_at)=date('now') AND status!='revoked') as sales_today,
-        (SELECT COALESCE(SUM(total_amount),0) FROM sales_orders WHERE date(created_at)=date('now') AND status!='revoked') as revenue_today,
-        (SELECT COALESCE(SUM(total_amount),0) FROM sales_orders WHERE date(created_at)=date('now', '-1 day') AND status!='revoked') as revenue_yesterday,
-        (SELECT COUNT(*) FROM purchase_orders WHERE status='pending') as pending_po,
-        (SELECT COUNT(*) FROM products WHERE quantity=0 AND is_active=1) as out_of_stock
+        (SELECT COUNT(*) FROM products WHERE is_active=1 AND account_id=?) as total_products,
+        (SELECT COUNT(*) FROM products WHERE quantity<=min_stock AND is_active=1 AND account_id=?) as low_stock,
+        (SELECT COALESCE(SUM(quantity*cost_price),0) FROM products WHERE is_active=1 AND account_id=?) as inventory_value,
+        (SELECT COUNT(*) FROM sales_orders WHERE date(created_at)=date('now') AND status!='revoked' AND account_id=?) as sales_today,
+        (SELECT COALESCE(SUM(total_amount),0) FROM sales_orders WHERE date(created_at)=date('now') AND status!='revoked' AND account_id=?) as revenue_today,
+        (SELECT COALESCE(SUM(total_amount),0) FROM sales_orders WHERE date(created_at)=date('now', '-1 day') AND status!='revoked' AND account_id=?) as revenue_yesterday,
+        (SELECT COUNT(*) FROM purchase_orders WHERE status='pending' AND account_id=?) as pending_po,
+        (SELECT COUNT(*) FROM products WHERE quantity=0 AND is_active=1 AND account_id=?) as out_of_stock
     """
-    df = fetch_df(query)
+    df = fetch_df(query, (account_id, account_id, account_id, account_id, account_id, account_id, account_id, account_id))
     
     if df.empty:
         return {"total_products": 0, "low_stock": 0, "inventory_value": 0, "sales_today": 0, 
@@ -336,40 +392,30 @@ def get_dashboard_stats():
         "out_of_stock": int(row['out_of_stock'])
     }
 
-def get_category_stock_value():
+def get_category_stock_value(account_id):
     return fetch_df("""
         SELECT c.name as category, SUM(p.quantity*p.cost_price) as value,
                COUNT(p.id) as products, SUM(p.quantity) as total_qty
         FROM products p JOIN categories c ON p.category_id=c.id
-        WHERE p.is_active=1
+        WHERE p.is_active=1 AND p.account_id=?
         GROUP BY c.name ORDER BY value DESC
-    """)
+    """, (account_id,))
 
-def get_movement_trend(days=30):
-    return fetch_df(f"""
-        SELECT date(created_at) as date,
-               SUM(CASE WHEN movement_type='purchase' THEN quantity ELSE 0 END) as stock_in,
-               SUM(CASE WHEN movement_type='sale' THEN quantity ELSE 0 END) as stock_out
-        FROM stock_movements
-        WHERE created_at >= datetime('now', '-{days} days')
-        GROUP BY date(created_at) ORDER BY date
-    """)
-
-def get_sales_trend(days=30):
+def get_sales_trend(account_id, days=30):
     return fetch_df(f"""
         SELECT date(created_at) as date, COUNT(*) as orders,
                SUM(total_amount) as revenue
         FROM sales_orders
-        WHERE created_at >= datetime('now','-{days} days') AND status!='revoked'
+        WHERE created_at >= datetime('now','-{days} days') AND status!='revoked' AND account_id=?
         GROUP BY date(created_at) ORDER BY date
-    """)
+    """, (account_id,))
 
-def generate_po_number():
-    df = fetch_df("SELECT COUNT(*) as c FROM purchase_orders")
+def generate_po_number(account_id):
+    df = fetch_df("SELECT COUNT(*) as c FROM purchase_orders WHERE account_id=?", (account_id,))
     n = df['c'].iloc[0] + 1 if not df.empty else 1
     return f"PO-{datetime.now().strftime('%Y%m')}-{n:04d}"
 
-def generate_order_number():
-    df = fetch_df("SELECT COUNT(*) as c FROM sales_orders")
+def generate_order_number(account_id):
+    df = fetch_df("SELECT COUNT(*) as c FROM sales_orders WHERE account_id=?", (account_id,))
     n = df['c'].iloc[0] + 1 if not df.empty else 1
     return f"SO-{datetime.now().strftime('%Y%m')}-{n:04d}"
