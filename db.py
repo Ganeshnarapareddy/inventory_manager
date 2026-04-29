@@ -278,7 +278,15 @@ def get_all_accounts():
     return fetch_df("SELECT * FROM accounts ORDER BY created_at DESC")
 
 def create_account(name):
-    execute_query("INSERT INTO accounts(name) VALUES(?)", (name,))
+    account_id = execute_query("INSERT INTO accounts(name) VALUES(?)", (name,))
+    # Auto-populate beverage categories
+    categories = ['Soft Drinks', 'Beer', 'Wine', 'Whiskey', 'Vodka', 'Rum', 'Brandy', 'Gin', 'Tequila', 'Juices', 'Water', 'Energy Drinks']
+    for cat in categories:
+        try:
+            execute_query("INSERT INTO categories(account_id, name) VALUES(?, ?)", (account_id, cat))
+        except Exception:
+            pass # ignore duplicates
+    return account_id
 
 def delete_account(account_id):
     # Cascade delete all related data to prevent orphans

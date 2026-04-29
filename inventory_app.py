@@ -92,42 +92,67 @@ def render_dashboard():
         st.dataframe(low_stock[['name', 'sku', 'quantity', 'min_stock', 'category']], use_container_width=True, hide_index=True)
     else:
         st.success(_("All products are well stocked!", current_lang))
+        
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown(f'### 📝 {_("Recent Sales History", current_lang)}')
+    recent_sales = db.get_recent_sales(account_id)
+    if not recent_sales.empty:
+        st.dataframe(recent_sales.head(10), use_container_width=True, hide_index=True)
+    else:
+        st.info(_("No sales data available.", current_lang))
+
+@st.dialog("Create New Account")
+def dialog_create_account(current_lang):
+    st.write(_("Please enter the name of the new account to create.", current_lang))
+    acc_name = st.text_input(_("Account Name", current_lang))
+    if st.button(_("Create Account", current_lang), type="primary"):
+        if acc_name:
+            db.create_account(acc_name)
+            st.session_state['show_toast'] = f"✅ Account '{acc_name}' created successfully!"
+            st.rerun()
+        else:
+            st.error(_("Please enter an account name.", current_lang))
+
+@st.dialog("Confirm Deletion")
+def dialog_delete_account(account_id, account_name, current_lang):
+    msg = _("Are you sure you want to completely delete '{account_name}'? All products, sales, and users attached to this account will be permanently lost.", current_lang)
+    st.warning(msg.replace("{account_name}", account_name))
+    if st.button(_("Delete Account", current_lang), type="primary"):
+        db.delete_account(account_id)
+        if st.session_state.get('account_id') == account_id:
+            st.session_state['account_id'] = None
+        st.session_state['show_toast'] = f"🗑️ Account '{account_name}' deleted completely."
+        st.rerun()
 
 def render_super_admin():
     current_lang = st.session_state.get('lang', 'en')
     st.markdown(f'<div class="section-header"><h2>🌍 {_("Super Admin", current_lang)}</h2></div>', unsafe_allow_html=True)
     
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("### " + _("Create New Account", current_lang))
-        with st.form("new_account_form"):
-            acc_name = st.text_input("Account Name")
-            if st.form_submit_button("Create Account"):
-                if acc_name:
-                    db.create_account(acc_name)
-                    st.toast(f"✅ Account '{acc_name}' created successfully!")
-                    st.rerun()
-                else:
-                    st.error("Please enter an account name.")
-                    
-    with col2:
-        st.markdown("### " + _("Manage Accounts", current_lang))
-        accounts = db.get_all_accounts()
-        if not accounts.empty:
-            for idx, row in accounts.iterrows():
-                with st.expander(f"🏢 {row['name']} (ID: {row['id']})"):
-                    st.warning(f"Are you sure you want to completely delete '{row['name']}'? All products, sales, and users attached to this account will be permanently lost.")
-                    if st.button("🗑️ Delete Account", key=f"del_acc_{row['id']}", type="primary"):
-                        db.delete_account(row['id'])
-                        st.toast(f"🗑️ Account '{row['name']}' deleted completely.")
-                        
-                        # Reset active session if they deleted the one they are currently viewing
-                        if st.session_state.get('account_id') == row['id']:
-                            st.session_state['account_id'] = None
-                            
-                        st.rerun()
-        else:
-            st.info("No accounts exist yet.")
+    # Show any pending toasts from dialogs
+    if 'show_toast' in st.session_state:
+        st.toast(st.session_state['show_toast'])
+        del st.session_state['show_toast']
+        
+    st.markdown("### " + _("Manage Accounts", current_lang))
+    
+    col_btn, col_empty = st.columns([1, 4])
+    with col_btn:
+        if st.button("➕ " + _("Create New Account", current_lang), use_container_width=True):
+            dialog_create_account(current_lang)
+            
+    st.markdown("<br>", unsafe_allow_html=True)
+    accounts = db.get_all_accounts()
+    if not accounts.empty:
+        for idx, row in accounts.iterrows():
+            c1, c2 = st.columns([4, 1])
+            with c1:
+                st.markdown(f"**🏢 {row['name']}** (ID: {row['id']})")
+            with c2:
+                if st.button("🗑️ " + _("Delete", current_lang), key=f"del_acc_{row['id']}"):
+                    dialog_delete_account(row['id'], row['name'], current_lang)
+            st.markdown("<hr style='margin:0.5rem 0; border-color: rgba(255,255,255,0.1);'>", unsafe_allow_html=True)
+    else:
+        st.info(_("No accounts exist yet.", current_lang))
 
 def render_products():
     current_lang = st.session_state.get('lang', 'en')
@@ -405,21 +430,31 @@ def render_analytics():
     current_lang = st.session_state.get('lang', 'en')
     st.markdown(f'<div class="section-header"><h2>📊 Analytics (All Accounts)</h2></div>', unsafe_allow_html=True)
     
-    total_rev = db.get_global_revenue()
+    accounts = db.get_all_accounts()
+    acc_filter = "All Accounts"
+    if not accounts.empty:
+        acc_filter = st.selectbox("Filter by Account", ["All Accounts"] + list(accounts['name']))
+        
+    sales = db.get_global_sales()
+    
+    if acc_filter != "All Accounts":
+        sales = sales[sales['account_name'] == acc_filter]
+        
+    total_rev = sales['total_amount'][sales['status'] != 'revoked'].sum() if not sales.empty else 0.0
+    
     st.markdown(f"""
         <div class="kpi-card" style="text-align:center; max-width: 400px; margin: 0 auto 30px auto;">
             <div class="kpi-icon">🌍</div>
             <div class="kpi-value">₹{total_rev:,.2f}</div>
-            <div class="kpi-label">Global Revenue (All Accounts)</div>
+            <div class="kpi-label">Revenue ({acc_filter})</div>
         </div>
     """, unsafe_allow_html=True)
     
     st.markdown("### All Sales Orders")
-    sales = db.get_global_sales()
     if not sales.empty:
         st.dataframe(sales, use_container_width=True, hide_index=True)
     else:
-        st.info("No sales data found globally.")
+        st.info("No sales data found.")
 
 def render_auth():
     st.markdown('<div style="max-width: 400px; margin: 100px auto;">', unsafe_allow_html=True)
