@@ -219,14 +219,14 @@ def render_sales():
             prod_sel = st.selectbox("Select Product", list(prod_dict.keys()) if prod_dict else ["No products available"])
             customer = st.text_input("Customer Name (Sold to whom?)")
             
-            custom_price = st.number_input("Custom Sold Price (₹) - Optional", min_value=0.0, step=0.01, value=0.0, help="Leave as 0.0 to use the default product price")
+            custom_price = st.number_input("Custom Sold Price (₹) - Optional", min_value=0.0, step=0.01, value=None, placeholder="Leave blank to use default price")
             qty = st.number_input("Quantity Sold", min_value=1, step=1)
             notes = st.text_input("Additional Notes (Optional)")
             
             if st.form_submit_button("Complete Sale"):
                 if prod_dict:
                     pid, default_price, max_qty = prod_dict[prod_sel]
-                    final_price = custom_price if custom_price > 0 else default_price
+                    final_price = custom_price if custom_price is not None else default_price
                     if not customer:
                         st.error("Please enter the customer name.")
                     elif qty > max_qty:
