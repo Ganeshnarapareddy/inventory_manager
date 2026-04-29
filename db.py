@@ -275,12 +275,26 @@ def update_user_role(user_id, role):
 
 # ── Account helpers ───────────────────────────────────────────────────────────
 def get_all_accounts():
-    return fetch_df("SELECT id, name, created_at FROM accounts ORDER BY name")
+    return fetch_df("SELECT * FROM accounts ORDER BY created_at DESC")
 
 def create_account(name):
     execute_query("INSERT INTO accounts(name) VALUES(?)", (name,))
 
-# ── Product helpers ───────────────────────────────────────────────────────────
+def delete_account(account_id):
+    # Cascade delete all related data to prevent orphans
+    execute_query("DELETE FROM sale_items WHERE order_id IN (SELECT id FROM sales_orders WHERE account_id=?)", (account_id,))
+    execute_query("DELETE FROM sales_orders WHERE account_id=?", (account_id,))
+    execute_query("DELETE FROM po_items WHERE po_id IN (SELECT id FROM purchase_orders WHERE account_id=?)", (account_id,))
+    execute_query("DELETE FROM purchase_orders WHERE account_id=?", (account_id,))
+    execute_query("DELETE FROM stock_movements WHERE product_id IN (SELECT id FROM products WHERE account_id=?)", (account_id,))
+    execute_query("DELETE FROM adjustments WHERE product_id IN (SELECT id FROM products WHERE account_id=?)", (account_id,))
+    execute_query("DELETE FROM products WHERE account_id=?", (account_id,))
+    execute_query("DELETE FROM categories WHERE account_id=?", (account_id,))
+    execute_query("DELETE FROM suppliers WHERE account_id=?", (account_id,))
+    execute_query("DELETE FROM users WHERE account_id=?", (account_id,))
+    execute_query("DELETE FROM accounts WHERE id=?", (account_id,))
+
+# ── Categories & Suppliers ───────────────────────────────────────────────────────────
 def get_products_full(account_id):
     return fetch_df("""
         SELECT p.id, p.name, p.sku, c.name as category, s.name as supplier,

@@ -97,13 +97,37 @@ def render_super_admin():
     current_lang = st.session_state.get('lang', 'en')
     st.markdown(f'<div class="section-header"><h2>🌍 {_("Super Admin", current_lang)}</h2></div>', unsafe_allow_html=True)
     
-    st.markdown("### " + _("Create New Account", current_lang))
-    with st.form("new_account_form"):
-        acc_name = st.text_input("Account Name")
-        if st.form_submit_button("Create Account"):
-            db.create_account(acc_name)
-            st.success(f"Account {acc_name} created!")
-            st.rerun()
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("### " + _("Create New Account", current_lang))
+        with st.form("new_account_form"):
+            acc_name = st.text_input("Account Name")
+            if st.form_submit_button("Create Account"):
+                if acc_name:
+                    db.create_account(acc_name)
+                    st.toast(f"✅ Account '{acc_name}' created successfully!")
+                    st.rerun()
+                else:
+                    st.error("Please enter an account name.")
+                    
+    with col2:
+        st.markdown("### " + _("Manage Accounts", current_lang))
+        accounts = db.get_all_accounts()
+        if not accounts.empty:
+            for idx, row in accounts.iterrows():
+                with st.expander(f"🏢 {row['name']} (ID: {row['id']})"):
+                    st.warning(f"Are you sure you want to completely delete '{row['name']}'? All products, sales, and users attached to this account will be permanently lost.")
+                    if st.button("🗑️ Delete Account", key=f"del_acc_{row['id']}", type="primary"):
+                        db.delete_account(row['id'])
+                        st.toast(f"🗑️ Account '{row['name']}' deleted completely.")
+                        
+                        # Reset active session if they deleted the one they are currently viewing
+                        if st.session_state.get('account_id') == row['id']:
+                            st.session_state['account_id'] = None
+                            
+                        st.rerun()
+        else:
+            st.info("No accounts exist yet.")
 
 def render_products():
     current_lang = st.session_state.get('lang', 'en')
