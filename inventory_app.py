@@ -439,6 +439,22 @@ def render_auth():
                 st.rerun()
             else:
                 st.error("Invalid username or password")
+                
+    with st.expander("Forgot Password? (Root Only)"):
+        with st.form("recovery_form"):
+            phrase = st.text_input("Please enter the Phrase", type="password")
+            new_pwd = st.text_input("New Password", type="password")
+            if st.form_submit_button("Reset Root Password"):
+                if phrase == "9182776493":
+                    if new_pwd:
+                        # Update the root user's password
+                        db.execute_query("UPDATE users SET password_hash=? WHERE role='root'", (db.hash_password(new_pwd),))
+                        st.success("Root password reset successfully! You can now log in.")
+                    else:
+                        st.error("Enter a new password.")
+                else:
+                    st.error("Invalid phrase.")
+                    
     st.markdown('</div>', unsafe_allow_html=True)
 
 def main():
@@ -506,13 +522,21 @@ def main():
         )
         
         st.markdown("<br><hr style='border-color: rgba(255,255,255,0.1);'>", unsafe_allow_html=True)
-        with st.expander("🔑 " + _("Change Password", st.session_state['lang'])):
-            with st.form("change_pass_form"):
-                new_p = st.text_input(_("Password", st.session_state['lang']), type="password")
+        with st.expander("👤 " + _("Edit Profile", st.session_state['lang'])):
+            with st.form("edit_profile_form"):
+                new_u = st.text_input("Username", value=st.session_state['user'])
+                new_p = st.text_input(_("New Password", st.session_state['lang']), type="password")
                 if st.form_submit_button("Update"):
+                    if new_u and new_u != st.session_state['user']:
+                        if not db.get_user(new_u):
+                            db.execute_query("UPDATE users SET username=? WHERE username=?", (new_u, st.session_state['user']))
+                            st.session_state['user'] = new_u
+                            st.success("Username updated!")
+                        else:
+                            st.error("Username already exists!")
                     if new_p:
                         db.update_user_password(st.session_state['user'], new_p)
-                        st.success("Updated!")
+                        st.success("Password updated!")
                     
         if st.button("🚪 " + _("Logout", st.session_state['lang']), use_container_width=True):
             st.session_state.clear()
