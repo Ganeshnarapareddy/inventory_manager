@@ -233,7 +233,7 @@ def render_sales():
         st.markdown(f"### {_('Record New Sale', current_lang)}")
         with st.form("sale_form"):
             products = db.fetch_df("SELECT id, name, quantity, selling_price FROM products WHERE is_active=1 AND account_id=?", (account_id,))
-            prod_dict = {f"{r['name']} (₹{r['selling_price']:.2f} | Stock: {r['quantity']})": (r['id'], r['selling_price'], r['quantity']) for _, r in products.iterrows()}
+            prod_dict = {f"{r['name']} (₹{r['selling_price']:.2f} | Stock: {r['quantity']})": (r['id'], r['selling_price'], r['quantity']) for idx, r in products.iterrows()}
             
             prod_sel = st.selectbox(_("Select Product", current_lang), list(prod_dict.keys()) if prod_dict else [_("No products available.", current_lang)])
             customer = st.text_input(_("Customer Name (Sold to whom?)", current_lang))
@@ -272,7 +272,7 @@ def render_sales():
             valid_sales = sales[sales['status'] != 'revoked']
             if not valid_sales.empty:
                 with st.form("revoke_form"):
-                    revoke_opts = {f"{r['order_number']} - {r['product_name']} (Qty: {r['quantity']})": r['order_id'] for _, r in valid_sales.iterrows()}
+                    revoke_opts = {f"{r['order_number']} - {r['product_name']} (Qty: {r['quantity']})": r['order_id'] for idx, r in valid_sales.iterrows()}
                     selected_revoke = st.selectbox("Select Order to Revoke", list(revoke_opts.keys()))
                     if st.form_submit_button("🚫 " + _("Revoke Selected Sale", current_lang)):
                         order_id = revoke_opts[selected_revoke]
@@ -342,11 +342,23 @@ def render_admin():
         st.markdown(f"### {_('Existing Users', current_lang)}")
         users_df = db.get_all_users(account_id)
         if not users_df.empty:
-            for _, row in users_df.iterrows():
+            for idx, row in users_df.iterrows():
                 with st.expander(f"👤 {row['username']} ({row['role']})"):
+                    # Username update
+                    u_col1, u_col2 = st.columns([3, 1])
+                    new_u = u_col1.text_input("Edit Username", value=row['username'], key=f"uname_{row['id']}")
+                    if u_col2.button("💾", key=f"btn_uname_{row['id']}"):
+                        if new_u and new_u != row['username']:
+                            if not db.get_user(new_u):
+                                db.update_username(row['id'], new_u)
+                                st.success("Username updated!")
+                                st.rerun()
+                            else:
+                                st.error("Username exists!")
+                    
                     uc1, uc2 = st.columns(2)
                     with uc1:
-                        new_r = st.selectbox("Change Role", ["read", "write", "admin"], index=["read", "write", "admin"].index(row['role']), key=f"role_{row['id']}")
+                        new_r = st.selectbox("Change Role", ["read", "write", "admin"], index=["read", "write", "admin"].index(row['role']) if row['role'] in ["read", "write", "admin"] else 2, key=f"role_{row['id']}")
                         if st.button("Update Role", key=f"btn_role_{row['id']}"):
                             db.update_user_role(row['id'], new_r)
                             st.success("Role updated!")
@@ -364,6 +376,26 @@ def render_admin():
                         if st.button("🗑️ Delete User", key=f"del_{row['id']}", type="primary"):
                             db.delete_user(row['id'])
                             st.rerun()
+
+def render_analytics():
+    current_lang = st.session_state.get('lang', 'en')
+    st.markdown(f'<div class="section-header"><h2>📊 Analytics (All Accounts)</h2></div>', unsafe_allow_html=True)
+    
+    total_rev = db.get_global_revenue()
+    st.markdown(f"""
+        <div class="kpi-card" style="text-align:center; max-width: 400px; margin: 0 auto 30px auto;">
+            <div class="kpi-icon">🌍</div>
+            <div class="kpi-value">₹{total_rev:,.2f}</div>
+            <div class="kpi-label">Global Revenue (All Accounts)</div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("### All Sales Orders")
+    sales = db.get_global_sales()
+    if not sales.empty:
+        st.dataframe(sales, use_container_width=True, hide_index=True)
+    else:
+        st.info("No sales data found globally.")
 
 def render_auth():
     st.markdown('<div style="max-width: 400px; margin: 100px auto;">', unsafe_allow_html=True)
@@ -406,12 +438,16 @@ def main():
         # Account Switcher for Root
         if role == 'root':
             accounts = db.get_all_accounts()
-            acc_opts = dict(zip(accounts['name'], accounts['id']))
-            current_acc_name = [k for k, v in acc_opts.items() if v == account_id]
-            sel_acc = st.selectbox(_("Active Account", st.session_state['lang']), list(acc_opts.keys()), index=list(acc_opts.keys()).index(current_acc_name[0]) if current_acc_name else 0)
-            if acc_opts[sel_acc] != account_id:
-                st.session_state['account_id'] = acc_opts[sel_acc]
-                st.rerun()
+            if not accounts.empty:
+                acc_opts = dict(zip(accounts['name'], accounts['id']))
+                current_acc_name = [k for k, v in acc_opts.items() if v == account_id]
+                sel_acc = st.selectbox(_("Active Account", st.session_state['lang']), list(acc_opts.keys()), index=list(acc_opts.keys()).index(current_acc_name[0]) if current_acc_name else 0)
+                if acc_opts[sel_acc] != account_id:
+                    st.session_state['account_id'] = acc_opts[sel_acc]
+                    st.rerun()
+            else:
+                st.info("No accounts exist. Go to Super Admin (+) to create one.")
+                st.session_state['account_id'] = None
         
         # Build menu based on role
         options = [_("Dashboard", st.session_state['lang']), _("Products", st.session_state['lang'])]
@@ -428,6 +464,8 @@ def main():
         if role == 'root':
             options.append(_("Super Admin", st.session_state['lang']))
             icons.append("globe")
+            options.append("Analytics")
+            icons.append("graph-up")
             
         selected = option_menu(
             menu_title=None,
@@ -459,15 +497,29 @@ def main():
         st.markdown("<div style='text-align:center; color:#64748b; font-size:0.8rem; margin-top: 20px;'>v2.0 SaaS Edition</div>", unsafe_allow_html=True)
 
     if selected == _("Dashboard", st.session_state['lang']):
-        render_dashboard()
+        if st.session_state.get('account_id'):
+            render_dashboard()
+        else:
+            st.warning("Please create or select an account first.")
     elif selected == _("Point of Sale", st.session_state['lang']):
-        render_sales()
+        if st.session_state.get('account_id'):
+            render_sales()
+        else:
+            st.warning("Please create or select an account first.")
     elif selected == _("Products", st.session_state['lang']):
-        render_products()
+        if st.session_state.get('account_id'):
+            render_products()
+        else:
+            st.warning("Please create or select an account first.")
     elif selected == _("User Management", st.session_state['lang']):
-        render_admin()
+        if st.session_state.get('account_id'):
+            render_admin()
+        else:
+            st.warning("Please create or select an account first.")
     elif selected == _("Super Admin", st.session_state['lang']):
         render_super_admin()
+    elif selected == "Analytics":
+        render_analytics()
 
 if __name__ == "__main__":
     main()

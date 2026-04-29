@@ -232,15 +232,11 @@ def init_db():
         c.execute("UPDATE users SET role='root' WHERE username='admin'")
         conn.commit()
     
-    # Initialize default account and root user
-    df = fetch_df("SELECT COUNT(*) as cnt FROM accounts")
-    if df.empty or df['cnt'].iloc[0] == 0:
-        execute_query("INSERT INTO accounts(id, name) VALUES(1, 'Default Account')")
-        
+    # Initialize root user if no users exist
     df_users = fetch_df("SELECT COUNT(*) as cnt FROM users")
     if df_users.empty or df_users['cnt'].iloc[0] == 0:
         hashed = hash_password("admin123")
-        execute_query("INSERT INTO users(username, password_hash, role, account_id) VALUES('admin', ?, 'root', 1)", (hashed,))
+        execute_query("INSERT INTO users(username, password_hash, role, account_id) VALUES('admin', ?, 'root', NULL)", (hashed,))
 
 # ── Auth & User helpers ───────────────────────────────────────────────────────
 def hash_password(password):
@@ -267,6 +263,9 @@ def get_all_users(account_id=None):
 def update_user_password(username, new_password):
     hashed = hash_password(new_password)
     execute_query("UPDATE users SET password_hash=? WHERE username=?", (hashed, username))
+
+def update_username(user_id, new_username):
+    execute_query("UPDATE users SET username=? WHERE id=?", (new_username, user_id))
 
 def delete_user(user_id):
     execute_query("DELETE FROM users WHERE id=?", (user_id,))
@@ -425,3 +424,17 @@ def generate_order_number(account_id):
     df = fetch_df("SELECT COUNT(*) as c FROM sales_orders WHERE account_id=?", (account_id,))
     n = df['c'].iloc[0] + 1 if not df.empty else 1
     return f"SO-{datetime.now().strftime('%Y%m')}-{n:04d}"
+
+def get_global_sales():
+    return fetch_df("""
+        SELECT so.id as order_id, so.order_number, so.customer_name, so.total_amount, so.status, so.created_at, a.name as account_name
+        FROM sales_orders so
+        JOIN accounts a ON so.account_id = a.id
+        ORDER BY so.created_at DESC
+    """)
+    
+def get_global_revenue():
+    df = fetch_df("SELECT SUM(total_amount) as total FROM sales_orders WHERE status!='revoked'")
+    if not df.empty and pd.notna(df['total'].iloc[0]):
+        return float(df['total'].iloc[0])
+    return 0.0
