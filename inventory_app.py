@@ -525,7 +525,7 @@ def main():
             {SVG_LOGO}
             <h2 style='margin: 0; padding: 0; font-size: 1.5rem; background: linear-gradient(90deg, #a5b4fc, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent;'>NexGen</h2>
         </div>
-        <div style='text-align: center; color: #94a3b8; font-size: 0.8rem; margin-bottom: 20px;'>Made by Ganesh</div>
+        <div style='text-align: center; color: #94a3b8; font-size: 0.8rem; margin-bottom: 20px;'>Made by Ganesh Narapareddy</div>
         """, unsafe_allow_html=True)
         st.markdown(f"<div style='text-align:center; color:#a5b4fc; margin-bottom: 20px;'>{_('Welcome', st.session_state['lang'])}, {st.session_state['user']} ({role.upper()})</div>", unsafe_allow_html=True)
         
@@ -627,17 +627,47 @@ def main():
     elif selected == "Analytics":
         render_analytics()
 
-    # Footer Injection
+    # Footer Injection — scroll-triggered swipe-up animation
     footer_html = f"""
-<div style="position: fixed; left: 0; bottom: 0; width: 100%; background-color: #020617; border-top: 1px solid rgba(255,255,255,0.05); z-index: 99999; padding: 10px 0; display: flex; justify-content: center; align-items: center; gap: 10px; font-family: 'Inter', sans-serif; font-size: 0.85rem; color: #94a3b8;">
+<div id="nexgen-footer" style="
+    opacity: 0;
+    transform: translateY(40px);
+    transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    width: 100%;
+    background: linear-gradient(135deg, #0f0f23 0%, #1a1a3e 50%, #0f1f3d 100%);
+    border-top: 1px solid rgba(99,102,241,0.2);
+    padding: 14px 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.85rem;
+    color: #94a3b8;
+    margin-top: 40px;
+">
     {SVG_LOGO_SMALL}
     <span style="color: white; font-weight: 600;">NexGen Inventory</span>
-    <span style="color: #475569;">|</span>
+    <span style="color: rgba(99,102,241,0.4);">|</span>
     <span>Made by Ganesh Narapareddy</span>
 </div>
-<style>
-    .block-container {{ padding-bottom: 60px !important; }}
-</style>
+<script>
+    const footer = document.getElementById('nexgen-footer');
+    if (footer) {{
+        const observer = new IntersectionObserver((entries) => {{
+            entries.forEach(entry => {{
+                if (entry.isIntersecting) {{
+                    footer.style.opacity = '1';
+                    footer.style.transform = 'translateY(0)';
+                }} else {{
+                    footer.style.opacity = '0';
+                    footer.style.transform = 'translateY(40px)';
+                }}
+            }});
+        }}, {{ threshold: 0.1 }});
+        observer.observe(footer);
+    }}
+</script>
 """
     st.markdown(footer_html, unsafe_allow_html=True)
 
