@@ -280,7 +280,7 @@ def get_all_accounts():
 def create_account(name):
     account_id = execute_query("INSERT INTO accounts(name) VALUES(?)", (name,))
     # Auto-populate beverage categories
-    categories = ['Soft Drinks', 'Beer', 'Wine', 'Whiskey', 'Vodka', 'Rum', 'Brandy', 'Gin', 'Tequila', 'Juices', 'Water', 'Energy Drinks']
+    categories = ['Soft Drinks', 'Beer', 'Wine', 'Whiskey', 'Vodka', 'Rum', 'Brandy', 'Gin', 'Tequila', 'Scotch', 'Juices', 'Water', 'Energy Drinks', 'Champagne', 'Cognac']
     for cat in categories:
         try:
             execute_query("INSERT INTO categories(account_id, name) VALUES(?, ?)", (account_id, cat))
@@ -303,6 +303,18 @@ def delete_account(account_id):
     execute_query("DELETE FROM accounts WHERE id=?", (account_id,))
 
 # ── Categories & Suppliers ───────────────────────────────────────────────────────────
+def get_categories(account_id):
+    cats = fetch_df("SELECT id, name FROM categories WHERE account_id=? ORDER BY name", (account_id,))
+    if cats.empty:
+        categories = ['Soft Drinks', 'Beer', 'Wine', 'Whiskey', 'Vodka', 'Rum', 'Brandy', 'Scotch', 'Gin', 'Tequila', 'Juices', 'Water', 'Energy Drinks', 'Champagne', 'Cognac']
+        for cat in categories:
+            try:
+                execute_query("INSERT INTO categories(account_id, name) VALUES(?, ?)", (account_id, cat))
+            except Exception:
+                pass
+        cats = fetch_df("SELECT id, name FROM categories WHERE account_id=? ORDER BY name", (account_id,))
+    return cats
+
 def get_products_full(account_id):
     return fetch_df("""
         SELECT p.id, p.name, p.sku, c.name as category, s.name as supplier,
@@ -447,13 +459,23 @@ def generate_order_number(account_id):
     n = df['c'].iloc[0] + 1 if not df.empty else 1
     return f"SO-{datetime.now().strftime('%Y%m')}-{n:04d}"
 
-def get_global_sales():
-    return fetch_df("""
-        SELECT so.id as order_id, so.order_number, so.customer_name, so.total_amount, so.status, so.created_at, a.name as account_name
+def get_global_sales(category_name=None):
+    query = """
+        SELECT DISTINCT so.id as order_id, so.order_number, so.customer_name, so.total_amount, so.status, so.created_at, a.name as account_name
         FROM sales_orders so
         JOIN accounts a ON so.account_id = a.id
-        ORDER BY so.created_at DESC
-    """)
+    """
+    params = []
+    if category_name and category_name != "All Categories":
+        query += """
+            JOIN sale_items si ON si.order_id = so.id
+            JOIN products p ON si.product_id = p.id
+            JOIN categories c ON p.category_id = c.id
+            WHERE c.name = ?
+        """
+        params.append(category_name)
+    query += " ORDER BY so.created_at DESC"
+    return fetch_df(query, tuple(params))
     
 def get_global_revenue():
     df = fetch_df("SELECT SUM(total_amount) as total FROM sales_orders WHERE status!='revoked'")

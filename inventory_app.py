@@ -204,7 +204,7 @@ def render_products():
                 name = c1.text_input("Product Name*")
                 sku = c2.text_input("SKU*")
                 
-                categories = db.fetch_df("SELECT id, name FROM categories WHERE account_id=?", (account_id,))
+                categories = db.get_categories(account_id)
                 cat_opts = dict(zip(categories['name'], categories['id'])) if not categories.empty else {}
                 
                 c3, c4 = st.columns(2)
@@ -430,12 +430,18 @@ def render_analytics():
     current_lang = st.session_state.get('lang', 'en')
     st.markdown(f'<div class="section-header"><h2>📊 Analytics (All Accounts)</h2></div>', unsafe_allow_html=True)
     
+    c1, c2 = st.columns(2)
     accounts = db.get_all_accounts()
     acc_filter = "All Accounts"
     if not accounts.empty:
-        acc_filter = st.selectbox("Filter by Account", ["All Accounts"] + list(accounts['name']))
+        acc_filter = c1.selectbox("Filter by Account", ["All Accounts"] + list(accounts['name']))
         
-    sales = db.get_global_sales()
+    all_cats = db.fetch_df("SELECT DISTINCT name FROM categories ORDER BY name")
+    cat_filter = "All Categories"
+    if not all_cats.empty:
+        cat_filter = c2.selectbox("Filter by Category", ["All Categories"] + list(all_cats['name']))
+        
+    sales = db.get_global_sales(cat_filter)
     
     if acc_filter != "All Accounts":
         sales = sales[sales['account_name'] == acc_filter]
@@ -504,107 +510,107 @@ def main():
     if st.session_state.get('show_loading', False):
         st.session_state['show_loading'] = False
         splash_html = """
-        <div id="splash-screen">
-            <div class="logo-text">NexGen Inventory</div>
-            <div class="made-by">Made by Ganesh</div>
-            <div class="loader"></div>
-        </div>
-        <style>
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
-        
-        #splash-screen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: radial-gradient(circle at center, #1e1b4b 0%, #020617 100%);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 999999;
-            color: white;
-            font-family: 'Inter', sans-serif;
-            animation: hideSplash 3.5s forwards;
-        }
-        
-        .logo-text {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 4rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, #a5b4fc 0%, #818cf8 50%, #c084fc 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 15px;
-            opacity: 0;
-            animation: slideDown 1s cubic-bezier(0.4, 0, 0.2, 1) 0.2s forwards;
-        }
-        
-        .made-by {
-            font-size: 1.5rem;
-            color: #94a3b8;
-            letter-spacing: 4px;
-            text-transform: uppercase;
-            margin-bottom: 50px;
-            opacity: 0;
-            animation: slideUp 1s cubic-bezier(0.4, 0, 0.2, 1) 0.6s forwards;
-        }
-        
-        .loader {
-            width: 60px;
-            height: 60px;
-            position: relative;
-            opacity: 0;
-            animation: fadeIn 1s ease-in 1s forwards;
-        }
-        
-        .loader:before, .loader:after {
-            content: "";
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            border: 4px solid transparent;
-            border-top-color: #818cf8;
-            animation: spin 1.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
-        }
-        
-        .loader:after {
-            border-top-color: #c084fc;
-            animation: spin 1s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite reverse;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg) scale(1); }
-            50% { transform: rotate(180deg) scale(1.1); }
-            100% { transform: rotate(360deg) scale(1); }
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-        
-        @keyframes slideDown {
-            from { opacity: 0; transform: translateY(-30px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        @keyframes slideUp {
-            from { opacity: 0; transform: translateY(30px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        @keyframes hideSplash {
-            0% { opacity: 1; visibility: visible; }
-            80% { opacity: 1; visibility: visible; }
-            100% { opacity: 0; visibility: hidden; pointer-events: none; }
-        }
-        </style>
-        """
+<div id="splash-screen">
+    <div class="logo-text">NexGen Inventory</div>
+    <div class="made-by">Made by Ganesh Narapareddy</div>
+    <div class="loader"></div>
+</div>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+
+#splash-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: radial-gradient(circle at center, #1e1b4b 0%, #020617 100%);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 999999;
+    color: white;
+    font-family: 'Inter', sans-serif;
+    animation: hideSplash 3.5s forwards;
+}
+
+.logo-text {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 4rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #a5b4fc 0%, #818cf8 50%, #c084fc 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 15px;
+    opacity: 0;
+    animation: slideDown 1s cubic-bezier(0.4, 0, 0.2, 1) 0.2s forwards;
+}
+
+.made-by {
+    font-size: 1.5rem;
+    color: #94a3b8;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    margin-bottom: 50px;
+    opacity: 0;
+    animation: slideUp 1s cubic-bezier(0.4, 0, 0.2, 1) 0.6s forwards;
+}
+
+.loader {
+    width: 60px;
+    height: 60px;
+    position: relative;
+    opacity: 0;
+    animation: fadeIn 1s ease-in 1s forwards;
+}
+
+.loader:before, .loader:after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    border: 4px solid transparent;
+    border-top-color: #818cf8;
+    animation: spin 1.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
+}
+
+.loader:after {
+    border-top-color: #c084fc;
+    animation: spin 1s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite reverse;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg) scale(1); }
+    50% { transform: rotate(180deg) scale(1.1); }
+    100% { transform: rotate(360deg) scale(1); }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-30px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes hideSplash {
+    0% { opacity: 1; visibility: visible; }
+    80% { opacity: 1; visibility: visible; }
+    100% { opacity: 0; visibility: hidden; pointer-events: none; }
+}
+</style>
+"""
         st.markdown(splash_html, unsafe_allow_html=True)
 
     role = st.session_state.get('role', 'read')
