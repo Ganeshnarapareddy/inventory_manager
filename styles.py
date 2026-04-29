@@ -97,6 +97,25 @@ html, body, [class*="css"] {
     box-shadow: 0 0 0 3px rgba(99,102,241,0.2) !important;
 }
 
+/* ── Selectbox dropdown list ──────────────────────────────── */
+[data-baseweb="popover"] {
+    background: #1a1a3e !important;
+    border: 1px solid rgba(99,102,241,0.3) !important;
+    border-radius: 10px !important;
+}
+[data-baseweb="popover"] li {
+    color: #e2e8f0 !important;
+    background: transparent !important;
+}
+[data-baseweb="popover"] li:hover,
+[data-baseweb="popover"] li[aria-selected="true"] {
+    background: rgba(99,102,241,0.25) !important;
+    color: #ffffff !important;
+}
+[data-baseweb="select"] span {
+    color: #e2e8f0 !important;
+}
+
 /* ── DataFrames ────────────────────────────────────────────── */
 [data-testid="stDataFrame"], .stDataFrame {
     border: 1px solid rgba(99,102,241,0.25) !important;
