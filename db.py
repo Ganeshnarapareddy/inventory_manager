@@ -299,11 +299,8 @@ def revoke_sale(order_id):
     # Fetch all items in the order
     items = fetch_df("SELECT product_id, quantity FROM sale_items WHERE order_id=?", (order_id,))
     
-    # Restore quantities
+    # Restore quantities via stock movement (which automatically updates product quantity)
     for _, row in items.iterrows():
-        execute_query("UPDATE products SET quantity = quantity + ?, updated_at=datetime('now') WHERE id=?", 
-                      (int(row['quantity']), int(row['product_id'])))
-        # Optional: log the revocation as a stock movement
         add_stock_movement(int(row['product_id']), "adjustment_in", int(row['quantity']), 0, f"Revoke Order {order_id}", "Sale Revoked")
         
     # Mark order as revoked
