@@ -206,6 +206,9 @@ def init_db():
                 conn.execute(m)
             except Exception:
                 pass # Column already exists
+                
+        # Force admin user to root
+        conn.execute("UPDATE users SET role='root' WHERE username='admin'")
     else:
         c = conn.cursor()
         c.executescript(script)
@@ -224,6 +227,9 @@ def init_db():
                 c.execute(m)
             except Exception:
                 pass
+                
+        # Force admin user to root
+        c.execute("UPDATE users SET role='root' WHERE username='admin'")
         conn.commit()
     
     # Initialize default account and root user
