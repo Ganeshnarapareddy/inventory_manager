@@ -8,6 +8,11 @@ from streamlit_option_menu import option_menu
 import db
 import styles
 from lang import _
+import base64
+
+SVG_LOGO = '<svg width="32" height="32" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;"><rect width="100" height="100" rx="20" fill="url(#ng1)"/><defs><linearGradient id="ng1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#818cf8"/><stop offset="100%" stop-color="#c084fc"/></linearGradient></defs><path d="M25 75L25 25L75 75L75 25" fill="none" stroke="white" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+
+SVG_LOGO_SMALL = '<svg width="18" height="18" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;"><rect width="100" height="100" rx="20" fill="url(#ng2)"/><defs><linearGradient id="ng2" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#818cf8"/><stop offset="100%" stop-color="#c084fc"/></linearGradient></defs><path d="M25 75L25 25L75 75L75 25" fill="none" stroke="white" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 
 st.set_page_config(
     page_title="NexGen Inventory Pro",
@@ -467,13 +472,7 @@ def render_auth():
     st.markdown('<div style="max-width: 400px; margin: 100px auto;">', unsafe_allow_html=True)
     
     # Render logo in the center
-    try:
-        with open("logo.png", "rb") as f:
-            logo_b64 = base64.b64encode(f.read()).decode()
-            img_tag = f'<img src="data:image/png;base64,{logo_b64}" width="120" style="display:block; margin: 0 auto 20px auto; border-radius: 12px;">'
-            st.markdown(img_tag, unsafe_allow_html=True)
-    except:
-        pass
+    st.markdown(f'<div style="display:flex; justify-content:center; align-items:center; gap:10px; margin-bottom: 2rem;">{SVG_LOGO}<h2 style="margin:0; background: linear-gradient(90deg, #a5b4fc, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">NexGen Inventory</h2></div>', unsafe_allow_html=True)
         
     st.markdown('<div class="section-header" style="border-radius: 12px; text-align: center; margin-bottom: 2rem;"><h2>🔒 Portal Login</h2></div>', unsafe_allow_html=True)
     
@@ -521,12 +520,13 @@ def main():
     account_id = st.session_state.get('account_id', 1)
     
     with st.sidebar:
-        try:
-            st.image("logo.png", use_container_width=True)
-        except:
-            st.markdown("<h1>NexGen Inventory</h1>", unsafe_allow_html=True)
-            
-        st.markdown("<p style='text-align:center; color:#94a3b8; font-size: 0.9rem; font-weight: 500; margin-top: -15px;'>Made by Ganesh Narapareddy</p>", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div style='display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 10px; margin-bottom: 5px;'>
+            {SVG_LOGO}
+            <h2 style='margin: 0; padding: 0; font-size: 1.5rem; background: linear-gradient(90deg, #a5b4fc, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent;'>NexGen</h2>
+        </div>
+        <div style='text-align: center; color: #94a3b8; font-size: 0.8rem; margin-bottom: 20px;'>Made by Ganesh</div>
+        """, unsafe_allow_html=True)
         st.markdown(f"<div style='text-align:center; color:#a5b4fc; margin-bottom: 20px;'>{_('Welcome', st.session_state['lang'])}, {st.session_state['user']} ({role.upper()})</div>", unsafe_allow_html=True)
         
         # Language Toggle
@@ -628,69 +628,17 @@ def main():
         render_analytics()
 
     # Footer Injection
-    try:
-        with open("logo.png", "rb") as f:
-            logo_b64 = base64.b64encode(f.read()).decode()
-            img_tag = f'<img src="data:image/png;base64,{logo_b64}" width="24" style="margin-right:10px; vertical-align: middle; border-radius: 4px;">'
-    except Exception:
-        img_tag = ''
-        
     footer_html = f"""
-    <style>
-    .global-footer {{
-        position: fixed;
-        left: 0;
-        bottom: 0;
-        width: 100%;
-        background-color: #020617;
-        color: #94a3b8;
-        padding: 15px 0;
-        font-family: 'Inter', sans-serif;
-        font-size: 0.85rem;
-        border-top: 1px solid rgba(255,255,255,0.05);
-        z-index: 99999;
-        display: flex;
-        justify-content: center;
-    }}
-    .footer-content {{
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        width: 100%;
-        max-width: 1400px;
-        padding: 0 40px;
-    }}
-    .footer-links a {{
-        color: #94a3b8;
-        text-decoration: none;
-        margin-left: 20px;
-        transition: color 0.2s;
-    }}
-    .footer-links a:hover {{
-        color: #c084fc;
-    }}
-    /* Add padding to bottom to prevent footer overlap */
-    .block-container {{
-        padding-bottom: 100px !important;
-    }}
-    </style>
-    <div class="global-footer">
-        <div class="footer-content">
-            <div style="display:flex; align-items:center; font-weight: 600; color: white;">
-                {img_tag}
-                NexGen Inventory
-            </div>
-            <div>
-                Made by Ganesh Narapareddy | Copyright © 2026
-            </div>
-            <div class="footer-links">
-                <a href="#">Privacy Policy</a>
-                <a href="#">Terms of Service</a>
-                <a href="#">Support</a>
-            </div>
-        </div>
-    </div>
-    """
+<div style="position: fixed; left: 0; bottom: 0; width: 100%; background-color: #020617; border-top: 1px solid rgba(255,255,255,0.05); z-index: 99999; padding: 10px 0; display: flex; justify-content: center; align-items: center; gap: 10px; font-family: 'Inter', sans-serif; font-size: 0.85rem; color: #94a3b8;">
+    {SVG_LOGO_SMALL}
+    <span style="color: white; font-weight: 600;">NexGen Inventory</span>
+    <span style="color: #475569;">|</span>
+    <span>Made by Ganesh Narapareddy</span>
+</div>
+<style>
+    .block-container {{ padding-bottom: 60px !important; }}
+</style>
+"""
     st.markdown(footer_html, unsafe_allow_html=True)
 
 if __name__ == "__main__":
